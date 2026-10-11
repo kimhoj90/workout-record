@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://workout-record-v30-mobile.vercel.app/sitemap.xml
