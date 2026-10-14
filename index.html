@@ -1160,7 +1160,11 @@ function downloadBackupFile(file) {
 async function saveBackupToDevice() {
     const file = makeBackupFile();
     el('backupDialog').close();
-    if (typeof window.showSaveFilePicker === 'function') {
+    // Android PWAs sometimes expose showSaveFilePicker but reject it before opening a dialog.
+    // Prefer a normal download on Android; do not confuse an API AbortError with user cancellation.
+    const isAndroid = /Android/i.test(navigator.userAgent || '') ||
+        (navigator.userAgentData && navigator.userAgentData.platform === 'Android');
+    if (!isAndroid && typeof window.showSaveFilePicker === 'function') {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName: file.name,
