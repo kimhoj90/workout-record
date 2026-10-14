@@ -272,7 +272,7 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 유산소: <code>러닝 / 유산소 / 30분 5km 130bpm / 1세트</code><br>
 같은 운동명을 여러 줄 적으면 하나의 종목으로 합치고, 입력한 순서대로 세트별 중량·횟수를 유지해. 단위(kg·개·세트)는 중량운동에서 생략해도 돼. 운동 이름과 각 항목을 / 로 구분해 줘.</div>
 <div id="textRoutinePreview" class="notice" role="status" aria-live="polite" hidden></div>
-<p class="subtext">같은 이름·종류의 기존 운동 종목을 재사용하고, 세트별 목표는 이 루틴에만 따로 저장해. 이전 루틴이나 운동 기록은 바꾸지 않아.</p>
+<p class="subtext">이름의 띄어쓰기·보이지 않는 문자 차이까지 확인해 같은 운동을 묶어. 기존 운동 종목은 재사용하고, 세트별 목표는 이 루틴에만 저장해. 이전 루틴이나 기록은 바꾸지 않아.</p>
 </div>
 <div class="dialog-foot"><button class="btn" type="button" data-close-dialog="textRoutineDialog">취소</button><button class="btn main" type="submit">루틴 생성</button></div>
 </form>
@@ -864,7 +864,54 @@ function renderSetRow(it, se, i) {
 }
 function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">운동 종목과 목표 세트를 자유롭게 등록하고 편집할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
 function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · ${((_a = e.defaultSets) === null || _a === void 0 ? void 0 : _a.length) || 0}세트${e.type === 'cardio' ? '' : ` · 휴식 ${(_b = e.restSeconds) !== null && _b !== void 0 ? _b : 90}초`}</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
-function renderRoutines() { return `<div class="card highlight"><h2>자주 쓰는 루틴</h2><p class="muted-block">운동 목록에서 필요한 종목을 골라 순서를 정하고, 언제든 불러올 수 있어.</p><div class="buttons"><button class="btn main" data-action="open-routine">+ 새 루틴</button><button class="btn outline" data-action="open-text-routine">+ 텍스트로 루틴 추가</button></div></div>${state.routines.length ? state.routines.map(r => `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(r.name)}</div><small>${r.exerciseIds.length}개 종목</small></div></div><p class="subtext" style="margin:10px 0">${escapeHtml(r.exerciseIds.map(id => { var _a; return ((_a = exerciseById(id)) === null || _a === void 0 ? void 0 : _a.name) || '삭제된 운동'; }).join(' → '))}</p><div class="buttons"><button class="btn main tiny" data-action="start-routine" data-id="${r.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>이 루틴으로 시작</button><button class="btn tiny" data-action="edit-routine" data-id="${r.id}">편집</button><button class="btn tiny" data-action="duplicate-routine" data-id="${r.id}">복제</button><button class="btn tiny danger" data-action="delete-routine" data-id="${r.id}">삭제</button></div></article>`).join('') : `<div class="empty"><strong>저장된 루틴이 없어</strong>운동 목록에서 종목을 먼저 만들고 루틴을 구성해 줘.</div>`}`; }
+function countRoutineDuplicateNames(r) {
+    const seen = new Map();
+    let count = 0;
+    for (const id of r.exerciseIds) {
+        const ex = exerciseById(id);
+        if (!ex) continue;
+        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        if (seen.has(key) && seen.get(key) !== id) count++;
+        else if (!seen.has(key)) seen.set(key, id);
+    }
+    return count;
+}
+// Repair a previously saved routine without touching the shared exercise
+// templates or records. Only different exercise IDs with equivalent names
+// and compatible types are combined; intentional repeated same-ID entries stay.
+function mergeRoutineDuplicateNames(id) {
+    const r = state.routines.find(item => item.id === id);
+    if (!r) return message('루틴을 찾지 못했어');
+    const ids = [], plans = clone(r.setPlans || {}), seen = new Map();
+    let mergedCount = 0;
+    for (const exerciseId of r.exerciseIds) {
+        const ex = exerciseById(exerciseId);
+        if (!ex) { ids.push(exerciseId); continue; }
+        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        if (seen.has(key) && seen.get(key) !== exerciseId) {
+            const keepId = seen.get(key), keep = exerciseById(keepId);
+            const left = Array.isArray(plans[keepId]) ? plans[keepId] : (keep.defaultSets || []);
+            const right = Array.isArray(plans[exerciseId]) ? plans[exerciseId] : (ex.defaultSets || []);
+            if (left.length + right.length > 200)
+                return message('종목당 200세트까지 합칠 수 있어. 먼저 루틴을 확인해 줘');
+            plans[keepId] = [...clone(left), ...clone(right)];
+            delete plans[exerciseId];
+            mergedCount++;
+            continue;
+        }
+        if (!seen.has(key)) seen.set(key, exerciseId);
+        ids.push(exerciseId);
+    }
+    if (!mergedCount) return message('합칠 중복 운동이 없어');
+    if (!confirm(`이 루틴에서 같은 운동명으로 보이는 ${mergedCount}개 종목을 합칠까?\n\n각 세트의 목표 중량·횟수는 순서대로 유지하고, 기존 운동 목록·다른 루틴·과거 기록은 변경하지 않아.`)) return;
+    r.exerciseIds = ids;
+    r.setPlans = plans;
+    r.updatedAt = isoNow();
+    modified();
+    renderAll();
+    message(`중복 운동 ${mergedCount}개를 합쳤어 (${ids.length}종목)`);
+}
+function renderRoutines() { return `<div class="card highlight"><h2>자주 쓰는 루틴</h2><p class="muted-block">운동 목록에서 필요한 종목을 골라 순서를 정하고, 언제든 불러올 수 있어.</p><div class="buttons"><button class="btn main" data-action="open-routine">+ 새 루틴</button><button class="btn outline" data-action="open-text-routine">+ 텍스트로 루틴 추가</button></div></div>${state.routines.length ? state.routines.map(r => `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(r.name)}</div><small>${r.exerciseIds.length}개 종목</small></div></div><p class="subtext" style="margin:10px 0">${escapeHtml(r.exerciseIds.map(id => { var _a; return ((_a = exerciseById(id)) === null || _a === void 0 ? void 0 : _a.name) || '삭제된 운동'; }).join(' → '))}</p><div class="buttons"><button class="btn main tiny" data-action="start-routine" data-id="${r.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>이 루틴으로 시작</button><button class="btn tiny" data-action="edit-routine" data-id="${r.id}">편집</button>${countRoutineDuplicateNames(r) ? `<button class="btn tiny outline" data-action="merge-routine-duplicates" data-id="${r.id}">중복 종목 합치기</button>` : ''}<button class="btn tiny" data-action="duplicate-routine" data-id="${r.id}">복제</button><button class="btn tiny danger" data-action="delete-routine" data-id="${r.id}">삭제</button></div></article>`).join('') : `<div class="empty"><strong>저장된 루틴이 없어</strong>운동 목록에서 종목을 먼저 만들고 루틴을 구성해 줘.</div>`}`; }
 function readout(v, empty = '미기록') { const value = String(v !== null && v !== void 0 ? v : '').trim(); return escapeHtml(value || empty); }
 function metricSummary(type, mode, values) {
     const data = values || {};
@@ -1031,10 +1078,20 @@ function parseTextRoutineInput(raw) {
 // Consolidate repeated exercise names into one item while retaining the precise
 // order and target metrics of each set. A routine may have a different plan
 // without changing the shared exercise library template or other routines.
+// A pasted exercise name can look identical yet contain zero-width characters,
+// compatibility jamo or different spacing. Normalize them consistently for
+// both text imports and comparisons with existing exercise library entries.
+function exerciseNameKey(name) {
+    return String(name || '').normalize('NFKC')
+        .replace(/[\u00AD\u034F\u180E\u200B-\u200D\u2060\uFEFF]/g, '')
+        .replace(/\s+/g, '')
+        .toLocaleLowerCase();
+}
 function groupTextRoutineRows(rows) {
     const groups = [], byName = new Map();
     for (const row of rows) {
-        const key = row.name.replace(/\s+/g, ' ').toLocaleLowerCase();
+        const key = exerciseNameKey(row.name);
+        if (!key) throw new Error('운동명에 글자가 없거나 보이지 않는 문자만 있어.');
         let group = byName.get(key);
         if (group && (group.type !== row.type || group.bodyweightMode !== row.bodyweightMode))
             throw new Error(`${row.name}: 같은 운동명에 서로 다른 운동 종류·측정 방식을 섞을 수 없어.`);
@@ -1080,7 +1137,7 @@ function saveTextRoutine(event) {
     // Plans live on the individual routine, so future progressive overload
     // doesn't create dozens of duplicate library exercises or alter old plans.
     const toAdd = [], ids = [], setPlans = {};
-    const normalized = name => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    const normalized = exerciseNameKey;
     for (const group of groups) {
         const match = [...state.exerciseLibrary, ...toAdd].find(ex =>
             normalized(ex.name) === normalized(group.name) && ex.type === group.type &&
@@ -1346,6 +1403,9 @@ main.addEventListener('click', e => {
                 break;
             case 'edit-routine':
                 openRoutineDialog(id);
+                break;
+            case 'merge-routine-duplicates':
+                mergeRoutineDuplicateNames(id);
                 break;
             case 'duplicate-routine': {
                 const r = state.routines.find(x => x.id === id);
