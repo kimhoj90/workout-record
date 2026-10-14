@@ -263,16 +263,16 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 <div class="dialog-head"><h2 id="textRoutineTitle">텍스트로 루틴 추가</h2><button class="btn tiny ghost" type="button" data-close-dialog="textRoutineDialog" aria-label="닫기">닫기 ×</button></div>
 <div class="dialog-body">
 <label class="field-label">루틴 이름 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 월요일 전신운동"></label>
-<label class="field-label">운동 목록 (한 줄에 한 종목)
-<textarea class="area text-routine-area" id="textRoutineInput" name="lines" rows="7" required spellcheck="false" placeholder="바벨 스쿼트 / 40kg / 10개 / 3세트&#10;랫풀다운 / 35kg / 12개 / 4세트&#10;푸시업 / 맨손 / 15개 / 3세트"></textarea></label>
+<label class="field-label">운동 목록 (한 줄에 하나의 세트 구간)
+<textarea class="area text-routine-area" id="textRoutineInput" name="lines" rows="7" required spellcheck="false" placeholder="바벨스쿼트 / 20 / 10 / 1&#10;바벨스쿼트 / 40 / 8 / 4&#10;바벨스쿼트 / 50 / 5 / 1&#10;랫풀다운 / 35 / 12 / 4"></textarea></label>
 <div class="subtext">형식: <strong>운동 종목 / 무게 / 횟수 / 세트</strong><br>
 중량: <code>스쿼트 / 40kg / 10개 / 3세트</code><br>
 맨손: <code>푸시업 / 맨손 / 15개 / 3세트</code><br>
 시간유지: <code>플랭크 / 맨손 / 1분 30초 / 3세트</code><br>
 유산소: <code>러닝 / 유산소 / 30분 5km 130bpm / 1세트</code><br>
-단위(kg·개·세트)는 중량운동에서 생략해도 돼. 운동 이름과 각 항목을 / 로 구분해 줘.</div>
+같은 운동명을 여러 줄 적으면 하나의 종목으로 합치고, 입력한 순서대로 세트별 중량·횟수를 유지해. 단위(kg·개·세트)는 중량운동에서 생략해도 돼. 운동 이름과 각 항목을 / 로 구분해 줘.</div>
 <div id="textRoutinePreview" class="notice" role="status" aria-live="polite" hidden></div>
-<p class="subtext">기존 운동 목록과 같은 종목·목표가 있으면 재사용해. 목표가 다르면 새 운동으로 추가하며, 기존 운동·루틴·기록을 변경하지 않아.</p>
+<p class="subtext">같은 이름·종류의 기존 운동 종목을 재사용하고, 세트별 목표는 이 루틴에만 따로 저장해. 이전 루틴이나 운동 기록은 바꾸지 않아.</p>
 </div>
 <div class="dialog-foot"><button class="btn" type="button" data-close-dialog="textRoutineDialog">취소</button><button class="btn main" type="submit">루틴 생성</button></div>
 </form>
@@ -963,7 +963,10 @@ function openRoutineDialog(id = null) { editRoutineId = id; const r = state.rout
 function saveRoutine() { const f = el('routineForm'), name = f.elements.name.value.trim(); if (!name) {
     message('루틴 이름을 입력해 줘');
     return;
-} const prev = state.routines.find(r => r.id === editRoutineId); const r = { id: (prev === null || prev === void 0 ? void 0 : prev.id) || uuid(), name, exerciseIds: routineDraft.filter(id => exerciseById(id)), createdAt: (prev === null || prev === void 0 ? void 0 : prev.createdAt) || isoNow(), updatedAt: isoNow() }; if (prev)
+} const prev = state.routines.find(r => r.id === editRoutineId); const ids = routineDraft.filter(id => exerciseById(id));
+    // Preserve text-imported, routine-specific set targets when editing name/order/items.
+    const setPlans = prev && prev.setPlans ? Object.fromEntries(ids.filter(id => Array.isArray(prev.setPlans[id])).map(id => [id, clone(prev.setPlans[id])])) : null;
+    const r = { id: (prev === null || prev === void 0 ? void 0 : prev.id) || uuid(), name, exerciseIds: ids, ...(setPlans && Object.keys(setPlans).length ? { setPlans } : {}), createdAt: (prev === null || prev === void 0 ? void 0 : prev.createdAt) || isoNow(), updatedAt: isoNow() }; if (prev)
     state.routines[withId(state.routines, r.id)] = r;
 else
     state.routines.push(r); modified(); el('routineDialog').close(); renderAll(); message('루틴을 저장했어'); }
@@ -1022,16 +1025,37 @@ function parseTextRoutineRow(line, lineNo) {
 function parseTextRoutineInput(raw) {
     const lines = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     if (!lines.length) throw new Error('운동을 한 줄 이상 입력해 줘.');
-    if (lines.length > 30) throw new Error('한 번에 최대 30종목까지 추가할 수 있어.');
+    if (lines.length > 30) throw new Error('한 번에 최대 30줄까지 추가할 수 있어.');
     return lines.map((line, i) => parseTextRoutineRow(line, i + 1));
+}
+// Consolidate repeated exercise names into one item while retaining the precise
+// order and target metrics of each set. A routine may have a different plan
+// without changing the shared exercise library template or other routines.
+function groupTextRoutineRows(rows) {
+    const groups = [], byName = new Map();
+    for (const row of rows) {
+        const key = row.name.replace(/\s+/g, ' ').toLocaleLowerCase();
+        let group = byName.get(key);
+        if (group && (group.type !== row.type || group.bodyweightMode !== row.bodyweightMode))
+            throw new Error(`${row.name}: 같은 운동명에 서로 다른 운동 종류·측정 방식을 섞을 수 없어.`);
+        if (!group) {
+            group = { name: row.name, type: row.type, bodyweightMode: row.bodyweightMode, defaultSets: [] };
+            byName.set(key, group);
+            groups.push(group);
+        }
+        if (group.defaultSets.length + row.setCount > 200)
+            throw new Error(`${row.name}: 한 종목의 세트 수는 최대 200개야.`);
+        for (let i = 0; i < row.setCount; i++) group.defaultSets.push(clone(row.metric));
+    }
+    return groups;
 }
 function updateTextRoutinePreview() {
     const preview = el('textRoutinePreview'), input = el('textRoutineInput').value.trim();
     if (!input) { preview.hidden = true; preview.textContent = ''; return; }
     preview.hidden = false;
     try {
-        const rows = parseTextRoutineInput(input);
-        preview.textContent = `${rows.length}종목 입력 확인 · ${rows.reduce((n, x) => n + x.setCount, 0)}세트. 생성하면 운동 목록과 루틴에 저장돼.`;
+        const rows = parseTextRoutineInput(input), groups = groupTextRoutineRows(rows);
+        preview.textContent = `${groups.length}종목 · ${rows.length}줄 · ${groups.reduce((n, g) => n + g.defaultSets.length, 0)}세트. 같은 운동명은 하나로 묶이고 구간별 목표는 이 루틴에 저장돼.`;
         preview.style.borderColor = '';
     } catch (err) {
         preview.textContent = `입력 확인: ${err.message}`;
@@ -1048,41 +1072,65 @@ function saveTextRoutine(event) {
     const form = el('textRoutineForm');
     const name = form.elements.name.value.trim();
     if (!name || name.length > 80) { message('루틴 이름을 입력해 줘'); return; }
-    let rows;
-    try { rows = parseTextRoutineInput(form.elements.lines.value); }
+    let groups;
+    try { groups = groupTextRoutineRows(parseTextRoutineInput(form.elements.lines.value)); }
     catch (err) { updateTextRoutinePreview(); message(err.message); return; }
-    if (state.exerciseLibrary.length + rows.length > 2000 || state.routines.length >= 1000) {
-        message('저장 가능한 운동 또는 루틴 개수를 초과했어'); return;
-    }
-    // Build all changes in memory first. No existing exercise is modified.
-    const toAdd = [], ids = [];
-    for (const row of rows) {
-        const defaultSets = Array.from({ length: row.setCount }, () => clone(row.metric));
+    if (state.routines.length >= 1000) { message('저장 가능한 루틴 개수를 초과했어'); return; }
+    // Reuse existing exercise identities regardless of their default weights.
+    // Plans live on the individual routine, so future progressive overload
+    // doesn't create dozens of duplicate library exercises or alter old plans.
+    const toAdd = [], ids = [], setPlans = {};
+    const normalized = name => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    for (const group of groups) {
         const match = [...state.exerciseLibrary, ...toAdd].find(ex =>
-            ex.name === row.name && ex.type === row.type &&
-            (ex.bodyweightMode || 'reps') === row.bodyweightMode &&
-            JSON.stringify(ex.defaultSets) === JSON.stringify(defaultSets));
-        if (match) { ids.push(match.id); continue; }
-        const now = isoNow();
-        const ex = { id: uuid(), name: row.name, type: row.type, caution: '', tags: [],
-            bodyweightMode: row.bodyweightMode, restSeconds: row.type === 'cardio' ? 0 : 90,
-            defaultSets, createdAt: now, updatedAt: now };
-        toAdd.push(ex); ids.push(ex.id);
+            normalized(ex.name) === normalized(group.name) && ex.type === group.type &&
+            (ex.bodyweightMode || 'reps') === group.bodyweightMode);
+        let ex = match;
+        if (!ex) {
+            const now = isoNow();
+            ex = { id: uuid(), name: group.name, type: group.type, caution: '', tags: [],
+                bodyweightMode: group.bodyweightMode, restSeconds: group.type === 'cardio' ? 0 : 90,
+                defaultSets: clone(group.defaultSets), createdAt: now, updatedAt: now };
+            toAdd.push(ex);
+        }
+        ids.push(ex.id);
+        setPlans[ex.id] = clone(group.defaultSets);
+    }
+    if (state.exerciseLibrary.length + toAdd.length > 2000) {
+        message('저장 가능한 운동 종목 수를 초과했어'); return;
     }
     const now = isoNow();
     state.exerciseLibrary.push(...toAdd);
-    state.routines.push({ id: uuid(), name, exerciseIds: ids, createdAt: now, updatedAt: now });
+    state.routines.push({ id: uuid(), name, exerciseIds: ids, setPlans, createdAt: now, updatedAt: now });
     modified();
     el('textRoutineDialog').close();
     renderAll();
     message(`${name} 루틴을 만들었어 (${ids.length}종목)`);
 }
-function startRoutine(id) { const r = state.routines.find(x => x.id === id); if (!r)
-    return; const missing = r.exerciseIds.filter(x => !exerciseById(x)); if (missing.length)
-    return message('삭제된 운동이 있어. 루틴을 먼저 편집해 줘'); if (!r.exerciseIds.length)
-    return message('루틴에 운동이 없어'); const s = ensureTodaySession(); if (s.status === 'completed')
-    return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); if (!s.startedAt)
-    s.startedAt = isoNow(); s.items.push(...r.exerciseIds.map(exerciseById).filter(Boolean).map(newItem)); dirtySession(s); setTab('today'); message(`${r.name} 루틴을 오늘 운동에 추가했어`); }
+function startRoutine(id) {
+    const r = state.routines.find(x => x.id === id);
+    if (!r) return;
+    const missing = r.exerciseIds.filter(x => !exerciseById(x));
+    if (missing.length) return message('삭제된 운동이 있어. 루틴을 먼저 편집해 줘');
+    if (!r.exerciseIds.length) return message('루틴에 운동이 없어');
+    const s = ensureTodaySession();
+    if (s.status === 'completed') return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘');
+    if (!s.startedAt) s.startedAt = isoNow();
+    const items = r.exerciseIds.map(exerciseById).filter(Boolean).map(ex => {
+        const item = newItem(ex);
+        const planned = r.setPlans && r.setPlans[ex.id];
+        if (Array.isArray(planned) && planned.length > 0 && planned.length <= 200) {
+            // Text-generated routines use their own exact planned sets, not
+            // the last logged performance or a mutable library default.
+            item.sets = planned.map(metrics => ({
+                id: uuid(), target: clone(metrics), actual: clone(metrics), completed: false
+            }));
+        }
+        return item;
+    });
+    s.items.push(...items);
+    dirtySession(s); setTab('today'); message(`${r.name} 루틴을 오늘 운동에 추가했어`);
+}
 function analysisText(s) { var _a, _b, _c; const pain = { none: '없음', mild: '가벼움', moderate: '중간', severe: '심함' }, posture = { stable: '잘 지켜짐', shaky: '일부 흔들림', poor: '유지 어려움' }; const formatM = (k, v, type) => v == null || v === '' ? '미기록' : type === 'cardio' && k === 'durationSeconds' ? `${toDisplay(k, v, type)}분` : type === 'cardio' && k === 'distanceMeters' ? `${toDisplay(k, v, type)}km` : `${v}${{ weightKg: 'kg', reps: '개', durationSeconds: '초', distanceMeters: 'm', heartRate: 'bpm', rpe: '' }[k] || ''}`; let out = ['운동 코칭 요청', '', `날짜: ${s.date}`, `세션: ${sessionName(s)}`, `상태: ${s.status === 'completed' ? '완료' : '진행 중'}`, `운동 목표: ${state.settings.goal || '미기록'}`, `컨디션: ${s.condition || '미기록'}`, `피로감(1~5): ${(_a = s.fatigue) !== null && _a !== void 0 ? _a : '미기록'}`, `세션 메모: ${s.sessionNotes || '없음'}`, '', '운동별 수행 결과']; for (const [i, it] of s.items.entries()) {
     const a = it.assessment || {}, keys = it.type === 'weight' ? ['weightKg', 'reps'] : it.type === 'bodyweight' ? [it.bodyweightMode === 'duration' ? 'durationSeconds' : 'reps'] : ['durationSeconds', 'distanceMeters', 'heartRate'];
     out.push('', `${i + 1}. ${it.name} (${typeLabel[it.type]})`, `- 유의사항: ${it.caution || '없음'}`, ...(it.type === 'cardio' ? [] : [`- 휴식 설정: ${(_b = it.restSeconds) !== null && _b !== void 0 ? _b : 90}초`]));
@@ -1091,7 +1139,7 @@ function analysisText(s) { var _a, _b, _c; const pain = { none: '없음', mild: 
         out.push(`- ${j + 1}세트 [${se.completed ? '완료' : '미완료'}] 목표: ${pair('target')} / 실제 결과: ${se.completed ? pair('actual') : '미완료 (실제 수행 확인되지 않음)'}`);
     }
     out.push(`- 통증: ${pain[a.pain] || '미기록'}${a.painArea ? ' / 부위 ' + a.painArea : ''}`, `- 통증 상세: ${a.painNotes || '없음'}`, `- 자세: ${posture[a.posture] || '미기록'}`, `- 자세 메모: ${a.postureNotes || '없음'}`, `- 난이도 RPE: ${(_c = a.rpe) !== null && _c !== void 0 ? _c : '미기록'}`, `- 운동별 메모: ${a.notes || '없음'}`);
-} out.push('', '분석 요청:', '1. 오늘의 운동을 완료·미완료 세트까지 정확히 구분하여 요약해 주세요.', '2. 목표와 실제 수행 결과에서 관찰되는 점, 개선할 점을 알려 주세요.', '3. 통증·자세·난이도 기록을 참고해 안전하게 조정할 부분을 알려 주세요.', '4. 다음 운동 시점(날짜 또는 회복 조건)과 종목별 세트·중량·횟수 또는 유산소 시간 목표를 제안해 주세요.', '5. 제안의 이유, 불확실성, 다음번에 기록하면 좋은 항목을 구분해 주세요.', '6. 기록에 없는 결과를 만들어내지 말고, 진단하지 마세요. 심하거나 갑작스럽고 지속·악화되는 통증은 운동 중단과 의료 전문가 상담을 권해 주세요.'); return out.join('\n'); }
+} out.push('', '분석 요청:', '1. 오늘의 운동을 완료·미완료 세트까지 정확히 구분하여 요약해 주세요.', '2. 목표와 실제 수행 결과에서 관찰되는 점, 개선할 점을 알려 주세요.', '3. 통증·자세·난이도 기록을 참고해 안전하게 조정할 부분을 알려 주세요.', '4. 다음 운동 시점(날짜 또는 회복 조건)과 종목별 세트·중량·횟수 또는 유산소 시간 목표를 제안해 주세요.', '5. 제안의 이유, 불확실성, 다음번에 기록하면 좋은 항목을 구분해 주세요.', '6. 기록에 없는 결과를 만들어내지 말고, 진단하지 마세요. 심하거나 갑작스럽고 지속·악화되는 통증은 운동 중단과 의료 전문가 상담을 권해 주세요.', '', '다음 운동용 루틴 출력 요청:', '7. 답변 마지막에 반드시 「다음 운동용 루틴 (앱 붙여넣기)」라는 제목과, 앱의 「텍스트로 루틴 추가」에 그대로 복사할 수 있는 text 코드블록 하나를 넣어 주세요. 코드블록 안에는 제목·번호·설명·표·불릿·백틱 없이 실제 루틴 데이터만 넣어 주세요.', '8. 각 줄은 정확히 「운동 종목 / 무게 또는 종류 / 횟수·시간 / 세트」의 네 칸으로 작성하세요. 예: 바벨스쿼트 / 20 / 10 / 1, 바벨스쿼트 / 40 / 8 / 4, 바벨스쿼트 / 50 / 5 / 1. 같은 운동은 중량·횟수가 다른 구간마다 연속된 줄로 적으면 앱이 세트 순서대로 하나로 묶습니다.', '9. 맨손운동은 「푸시업 / 맨손 / 15 / 3」 또는 「플랭크 / 맨손 / 1분 30초 / 3」, 유산소는 「러닝 / 유산소 / 30분 5km 130bpm / 1」 형식입니다. 유산소 시간(분)은 필수이고 거리·심박은 생략 가능합니다. 한 줄은 1~30세트, 전체 최대 30줄을 지켜 주세요.', '10. 실제 달성 여부와 회복·피로·통증·자세·난이도를 바탕으로 점진적 증량 또는 횟수·세트·운동시간 조정을 제안하되, 무리한 증량을 전제로 하지 마세요. 미완료 운동은 수행한 것으로 간주하지 말고 불확실한 목표는 보수적으로 제안하세요. 코드블록 밖에는 변경 이유를 간단히 설명해 주세요.'); return out.join('\n'); }
 async function copyHistoryResults(id) {
     var _a;
     // Read only: generate text directly from the record displayed in history detail.
