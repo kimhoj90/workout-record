@@ -162,7 +162,7 @@
     .rest-clock { height: 190px; width: 190px; }
     .rest-time { font-size: 2.8rem; }
 }
-@media (prefers-reduced-motion: reduce) {
+ .warmup-card{border:1px solid var(--accent);margin-bottom:12px}.warmup-select{justify-content:space-between;gap:12px;margin:12px 0}.warmup-minutes{font-size:1.35rem;color:var(--accent)}.warmup-remaining{text-align:center;color:var(--accent);font-size:3.3rem;font-weight:850;font-variant-numeric:tabular-nums;margin:14px 0}.routine-plan{padding:12px;margin:10px 0}.routine-plan>.row{align-items:flex-start;gap:8px}.routine-plan .template-row{margin:6px 0}\n@media (prefers-reduced-motion: reduce) {
     .rest-clock { transition: none; }
 }
 
@@ -734,8 +734,8 @@ function historyTimeLabel(iso) { if (!iso)
     return null; return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function workoutDurationLabel(s) {
     if (s.status !== 'completed') return null;
-    // Old v2 records may only have createdAt. Never fabricate duration when a timestamp is invalid.
-    const start = Date.parse(s.startedAt || s.createdAt || '');
+    // Legacy records can fall back to createdAt, new sessions cannot.
+    const start = Date.parse(s.startedAt || (s.startMode === 'warmup' ? '' : s.createdAt) || '');
     const end = Date.parse(s.completedAt || '');
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '미기록';
     const minutes = Math.floor((end - start) / 60000);
@@ -745,7 +745,7 @@ function workoutDurationLabel(s) {
 }
 function historyTimeRange(s) {
     // Older v2 records have no startedAt; their creation time is the only available fallback.
-    const start = historyTimeLabel(s.startedAt || s.createdAt);
+    const start = historyTimeLabel(s.startedAt || (s.startMode === 'warmup' ? null : s.createdAt));
     const end = s.status === 'completed' ? historyTimeLabel(s.completedAt) : null;
     const range = `${start ? `시작 ${start}` : '시작시간 미기록'} ~ ${s.status === 'completed' ? (end ? `완료 ${end}` : '완료시간 미기록') : '진행 중'}`;
     return s.status === 'completed' ? `${range} · 총 운동시간 ${workoutDurationLabel(s)}` : range;
@@ -780,7 +780,10 @@ function restartTodayWorkout() {
     }
     // Unlock this same day's session for a fresh pass; replace completion times.
     s.status = 'active';
-    s.startedAt = isoNow();
+    s.startedAt = null;
+    s.warmupEndsAt = null;
+    s.warmupStatus = 'idle';
+    s.warmupMinutes = s.warmupMinutes || 5;
     s.completedAt = null;
     historyDetailId = null;
     el('restartDialog').close();
@@ -815,21 +818,103 @@ function saveDayAssessment() {
     s.completedAt = isoNow();
     dirtySession(s);
     workoutRestTimer.cancel();
+    stopWarmup(false);
     el('dayAssessmentDialog').close();
     renderAll();
     message('운동 평가와 기록을 저장했어');
 }
-function startSession(name = '오늘 운동', exerciseIds = []) { const s = { id: uuid(), date: localDate(), name: name || '오늘 운동', status: 'active', items: exerciseIds.map(exerciseById).filter(Boolean).map(newItem), sessionNotes: '', condition: '', fatigue: null, createdAt: isoNow(), startedAt: exerciseIds.length ? isoNow() : null, updatedAt: isoNow(), completedAt: null }; state.sessions.push(s); activeSessionId = s.id; modified(); setTab('today'); message('오늘 운동을 준비했어'); return s; }
+function startSession(name = '오늘 운동', exerciseIds = []) { const s = { id: uuid(), date: localDate(), name: name || '오늘 운동', status: 'active', items: exerciseIds.map(exerciseById).filter(Boolean).map(newItem), sessionNotes: '', condition: '', fatigue: null, createdAt: isoNow(), startedAt: null, startMode: 'warmup', warmupMinutes: 5, warmupEndsAt: null, warmupStatus: 'idle', updatedAt: isoNow(), completedAt: null }; state.sessions.push(s); activeSessionId = s.id; modified(); setTab('today'); message('오늘 운동을 준비했어'); return s; }
 function dirtySession(s) { s.updatedAt = isoNow(); modified(); }
 function listOptions(used = []) { return state.exerciseLibrary.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} · ${typeLabel[e.type]}</option>`).join(''); }
 function isTodayLocked() { return state.sessions.some(x => x.date === localDate() && x.status === 'completed'); }
+function renderWarmupPanel(s) {
+    if (s.status === 'completed') return '';
+    const mins = Number(s.warmupMinutes) || 5;
+    if (s.warmupStatus === 'running')
+        return `<section class="card warmup-card"><div class="row between"><h2>워밍업 진행 중</h2><span class="badge">운동 시작 ${historyTimeLabel(s.startedAt)}</span></div><p class="warmup-remaining" id="warmupTime">00:00</p><div class="buttons"><button class="btn tiny outline" data-action="warmup-minus">−5분</button><button class="btn tiny outline" data-action="warmup-plus">+5분</button><button class="btn tiny" data-action="warmup-finish">워밍업 종료 · 본운동 시작</button></div><p class="subtext">워밍업을 시작한 시각부터 운동시간을 계산해. 앱을 잠시 닫아도 남은 시간은 유지돼.</p></section>`;
+    if (s.warmupStatus === 'done' || s.startedAt)
+        return `<section class="card warmup-card"><div class="row between"><h2>워밍업</h2><span class="badge">운동 시작 ${historyTimeLabel(s.startedAt) || '미기록'}</span></div><p class="subtext">운동 시작시간이 기록됐어. 다시 워밍업하더라도 최초 시작시간은 변경되지 않아.</p><button class="btn outline tiny" data-action="warmup-start">워밍업 다시 시작 (5분)</button></section>`;
+    return `<section class="card warmup-card"><h2>워밍업 · 운동 시작</h2><p class="subtext">워밍업 시작 버튼을 누르는 순간 운동 시작시간이 기록돼.</p><div class="row warmup-select"><button type="button" class="btn outline" data-action="warmup-minus" ${mins <= 5 ? 'disabled' : ''}>−5분</button><strong class="warmup-minutes">${mins}분</strong><button type="button" class="btn outline" data-action="warmup-plus" ${mins >= 120 ? 'disabled' : ''}>+5분</button></div><button type="button" class="btn main block" data-action="warmup-start">워밍업 시작</button></section>`;
+}
+let warmupTicker = null, warmupAudioCtx = null;
+function playWarmupDone() {
+    try {
+        if (warmupAudioCtx && warmupAudioCtx.state === 'running' && !document.hidden) {
+            const tone = warmupAudioCtx.createOscillator(), gain = warmupAudioCtx.createGain();
+            tone.frequency.value = 880;
+            gain.gain.setValueAtTime(.0001, warmupAudioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(.1, warmupAudioCtx.currentTime + .02);
+            gain.gain.exponentialRampToValueAtTime(.0001, warmupAudioCtx.currentTime + .45);
+            tone.connect(gain).connect(warmupAudioCtx.destination);
+            tone.start(); tone.stop(warmupAudioCtx.currentTime + .46);
+        }
+        if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+    } catch (_) { /* browser audio and vibration may be unavailable */ }
+}
+function warmupDisplay(ms) {
+    const n = Math.max(0, Math.ceil(ms / 1000));
+    return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+}
+function stopWarmup(notify) {
+    const s = activeSession();
+    if (!s || s.warmupStatus !== 'running') return;
+    s.warmupStatus = 'done';
+    s.warmupEndsAt = null;
+    if (warmupTicker) { clearInterval(warmupTicker); warmupTicker = null; }
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    if (notify) { playWarmupDone(); message('워밍업 완료! 본운동을 시작해 줘'); }
+}
+function refreshWarmupTimer() {
+    const s = activeSession();
+    if (!s || s.warmupStatus !== 'running' || !s.warmupEndsAt) {
+        if (warmupTicker) { clearInterval(warmupTicker); warmupTicker = null; }
+        return;
+    }
+    const remaining = s.warmupEndsAt - Date.now();
+    if (remaining <= 0) { stopWarmup(true); return; }
+    const display = el('warmupTime');
+    if (display) display.textContent = warmupDisplay(remaining);
+    if (!warmupTicker) warmupTicker = setInterval(refreshWarmupTimer, 500);
+}
+function startWarmup() {
+    const s = ensureTodaySession();
+    if (s.status === 'completed' || s.warmupStatus === 'running') return;
+    workoutRestTimer.cancel();
+    if (!s.startedAt) s.startedAt = isoNow();
+    const mins = s.warmupStatus === 'done' ? 5 : Math.max(5, Math.min(120, Number(s.warmupMinutes) || 5));
+    s.warmupMinutes = mins;
+    s.warmupStatus = 'running';
+    s.warmupEndsAt = Date.now() + mins * 60000;
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+            if (!warmupAudioCtx) warmupAudioCtx = new Ctx();
+            warmupAudioCtx.resume().catch(() => {});
+        }
+    } catch (_) {}
+    dirtySession(s); renderAll(); refreshWarmupTimer();
+}
+function adjustWarmup(delta) {
+    const s = activeSession();
+    if (!s || s.status === 'completed') return;
+    if (s.warmupStatus === 'running') {
+        s.warmupEndsAt += delta * 60000;
+        s.warmupMinutes = Math.min(120, Math.max(5, Number(s.warmupMinutes || 5) + delta));
+        if (delta > 0) s.warmupEndsAt = Math.min(s.warmupEndsAt, Date.now() + 120 * 60000);
+        dirtySession(s); refreshWarmupTimer();
+        return;
+    }
+    s.warmupMinutes = Math.max(5, Math.min(120, (Number(s.warmupMinutes) || 5) + delta));
+    dirtySession(s); renderAll();
+}
 function renderToday() {
     const s = activeSession();
     if (!s || !state.sessions.includes(s))
         return `<section class="card highlight"><h2>나만의 운동 기록을 시작해 봐</h2><p class="muted-block">운동을 직접 만들거나 저장한 루틴을 불러와서 시작해 봐.</p><div class="buttons"><button class="btn main" data-action="go-library">운동 만들기</button><button class="btn outline" data-action="go-routines">루틴 불러오기</button></div></section>`;
     const { done, total } = progress(s);
     const p = total ? Math.round(done / total * 100) : 0, locked = s.status === 'completed';
-    return `<section class="card highlight"><div class="progress-top"><strong>${escapeHtml(sessionName(s))}</strong><span>${done} / ${total} 세트</span></div><div class="progress"><div class="bar" style="width:${p}%"></div></div><div class="toolbar"><span class="badge">${locked ? '완료된 기록' : '진행 중'}</span><span class="subtext">${locked ? '오늘 운동 기록이 잠겼어' : '오늘의 운동은 자동 저장돼'}</span></div>${s.startedAt && s.items.length ? `<p class="subtext" style="margin:10px 0 0">${escapeHtml(historyTimeRange(s))}</p>` : ''}</section>
+    return `${renderWarmupPanel(s)}<section class="card highlight"><div class="progress-top"><strong>${escapeHtml(sessionName(s))}</strong><span>${done} / ${total} 세트</span></div><div class="progress"><div class="bar" style="width:${p}%"></div></div><div class="toolbar"><span class="badge">${locked ? '완료된 기록' : '진행 중'}</span><span class="subtext">${locked ? '오늘 운동 기록이 잠겼어' : '오늘의 운동은 자동 저장돼'}</span></div>${s.startedAt && s.items.length ? `<p class="subtext" style="margin:10px 0 0">${escapeHtml(historyTimeRange(s))}</p>` : ''}</section>
 <fieldset class="workout-controls ${locked ? 'is-locked' : ''}" ${locked ? 'disabled aria-label="완료되어 수정할 수 없는 운동 기록"' : ''}>
 ${s.items.length ? s.items.map((it, n) => renderSessionItem(it, n, s)).join('') : `<div class="empty"><strong>아직 운동이 없어</strong>운동 목록에서 종목을 만들어 추가하거나 저장한 루틴을 불러와 봐.</div>`}
 <div class="card"><h2>운동 추가</h2><label class="sr-only" for="todayAddExercise">운동 종목 선택</label><select class="select" id="todayAddExercise"><option value="">운동 목록에서 선택</option>${listOptions()}</select><div class="buttons" style="margin-top:10px"><button class="btn tiny outline" data-action="open-exercise">+ 새 종목 만들기</button><button class="btn tiny" data-action="go-routines">루틴 불러오기</button></div></div>
@@ -974,8 +1059,7 @@ function ensureTodaySession() {
 }
 function addToToday(id) { const ex = exerciseById(id); if (!ex)
     return message('운동을 찾지 못했어'); const s = ensureTodaySession(); if (s.status === 'completed')
-    return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); if (!s.startedAt)
-    s.startedAt = isoNow(); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
+    return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
 function move(arr, i, dir) { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length)
     return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; }
 function refreshExerciseMode() {
@@ -1232,7 +1316,6 @@ function startRoutine(id) {
     if (!r.exerciseIds.length) return message('루틴에 운동이 없어');
     const s = ensureTodaySession();
     if (s.status === 'completed') return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘');
-    if (!s.startedAt) s.startedAt = isoNow();
     const items = r.exerciseIds.map(exerciseById).filter(Boolean).map(ex => {
         const item = newItem(ex);
         const planned = r.setPlans && r.setPlans[ex.id];
@@ -1385,7 +1468,7 @@ catch (e) {
     message('가져오기 실패: ' + e.message);
     return;
 } if (!confirm(`이 기기의 기록 ${state.sessions.length}개 세션, 운동 ${state.exerciseLibrary.length}개를 가져온 파일의 데이터로 모두 바꿀까?\n\n이 작업은 되돌릴 수 없어. 기존 자료를 먼저 백업해 줘.`))
-    return; workoutRestTimer.cancel(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); message('백업 파일을 복원했어'); }
+    return; workoutRestTimer.cancel(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); message('백업 파일을 복원했어'); }
 function install() { if (!installedPrompt) {
     message('HTTPS 배포 후 브라우저 메뉴에서 홈 화면에 추가해 줘');
     return;
@@ -1417,6 +1500,18 @@ main.addEventListener('click', e => {
     if (action) {
         const id = b.dataset.id;
         switch (action) {
+            case 'warmup-start':
+                startWarmup();
+                break;
+            case 'warmup-minus':
+                adjustWarmup(-5);
+                break;
+            case 'warmup-plus':
+                adjustWarmup(5);
+                break;
+            case 'warmup-finish':
+                stopWarmup(false);
+                break;
             case 'go-library':
                 setTab('library');
                 break;
@@ -1578,6 +1673,7 @@ main.addEventListener('click', e => {
                 se.completed = !se.completed;
                 if (se.completed && !s.startedAt)
                     s.startedAt = isoNow();
+                if (se.completed && s.warmupStatus === 'running') stopWarmup(false);
                 const ix = it.sets.indexOf(se);
                 if (se.completed && s.date === localDate() && it.type !== 'cardio') {
                     // Only start when an unfinished LATER set exists for this exercise.
@@ -1750,6 +1846,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 if ('serviceWorker' in navigator && ['https:', 'http:'].includes(location.protocol) && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname)))
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('PWA:', e)));
 initStorage().then(() => {
+    refreshWarmupTimer();
     const notice = el('startupAlert');
     if (notice && !window.__workoutRuntimeError)
         notice.hidden = true;
