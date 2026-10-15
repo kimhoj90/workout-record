@@ -1014,18 +1014,69 @@ function saveExerciseForm() {
     modified(); el('exerciseDialog').close(); renderAll();
     message(ex ? '종목을 수정했어' : '새 종목을 만들었어');
 }
-function renderRoutineDraft() { el('routineItems').innerHTML = routineDraft.length ? routineDraft.map((id, i) => { var _a; return `<div class="chip"><span>${i + 1}. ${escapeHtml(((_a = exerciseById(id)) === null || _a === void 0 ? void 0 : _a.name) || '삭제된 운동')}</span><div class="buttons"><button type="button" class="btn tiny" data-routine-move="up" data-routine-index="${i}">↑</button><button type="button" class="btn tiny" data-routine-move="down" data-routine-index="${i}">↓</button><button type="button" class="btn tiny danger" data-routine-remove="${i}">×</button></div></div>`; }).join('') : '<p class="subtext">등록된 종목이 없어. 위에서 선택해 추가해 줘.</p>'; }
-function openRoutineDialog(id = null) { editRoutineId = id; const r = state.routines.find(x => x.id === id), f = el('routineForm'); f.elements.name.value = (r === null || r === void 0 ? void 0 : r.name) || ''; routineDraft = clone((r === null || r === void 0 ? void 0 : r.exerciseIds) || []); el('routineExerciseSelect').innerHTML = '<option value="">종목을 선택해 추가</option>' + listOptions(); el('routineFormTitle').textContent = r ? '루틴 편집' : '새 루틴'; renderRoutineDraft(); el('routineDialog').showModal(); }
-function saveRoutine() { const f = el('routineForm'), name = f.elements.name.value.trim(); if (!name) {
-    message('루틴 이름을 입력해 줘');
-    return;
-} const prev = state.routines.find(r => r.id === editRoutineId); const ids = routineDraft.filter(id => exerciseById(id));
-    // Preserve text-imported, routine-specific set targets when editing name/order/items.
-    const setPlans = prev && prev.setPlans ? Object.fromEntries(ids.filter(id => Array.isArray(prev.setPlans[id])).map(id => [id, clone(prev.setPlans[id])])) : null;
-    const r = { id: (prev === null || prev === void 0 ? void 0 : prev.id) || uuid(), name, exerciseIds: ids, ...(setPlans && Object.keys(setPlans).length ? { setPlans } : {}), createdAt: (prev === null || prev === void 0 ? void 0 : prev.createdAt) || isoNow(), updatedAt: isoNow() }; if (prev)
-    state.routines[withId(state.routines, r.id)] = r;
-else
-    state.routines.push(r); modified(); el('routineDialog').close(); renderAll(); message('루틴을 저장했어'); }
+let routinePlanDraft = {};
+function routineSetFields(ex) {
+    if (ex.type === 'weight') return [['weightKg', 'kg', .5, null], ['reps', '회', 1, null]];
+    if (ex.type === 'bodyweight')
+        return ex.bodyweightMode === 'duration' ?
+            [['durationSeconds', '분', 1, 'min'], ['durationSeconds', '초', 1, 'sec']] :
+            [['reps', '회', 1, null]];
+    return [['durationSeconds', '분', .5, null], ['distanceMeters', 'km', .1, null], ['heartRate', 'bpm', 1, null]];
+}
+function renderRoutineDraft() {
+    el('routineItems').innerHTML = routineDraft.length ? routineDraft.map((id, i) => {
+        const ex = exerciseById(id);
+        if (!ex) return '';
+        const sets = routinePlanDraft[id] || [metricDefaults(ex)];
+        const rows = sets.map((metric, j) => {
+            const fields = routineSetFields(ex);
+            const inputs = fields.map(([key, unit, step, part]) => {
+                const val = part ? durationPart(metric.durationSeconds, part) : toDisplay(key, metric[key], ex.type);
+                return `<label class="template-metric"><input class="input" type="number" inputmode="decimal" min="0" ${part === 'sec' ? 'max="59"' : ''} step="${step}" data-routine-field="${key}" ${part ? `data-duration-part="${part}"` : ''} aria-label="${escapeHtml(ex.name)} ${j + 1}세트 ${unit}" value="${escapeHtml(val)}"><span class="unit">${unit}</span></label>`;
+            }).join('');
+            return `<div class="template-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''}" data-routine-set-index="${j}"><span class="small-label">${j + 1}</span>${inputs}<button class="btn tiny danger" type="button" data-routine-remove-set="${j}" title="세트 삭제" aria-label="${j + 1}세트 삭제">×</button></div>`;
+        }).join('');
+        return `<div class="card routine-plan" data-routine-exercise-id="${escapeHtml(id)}"><div class="row between"><strong>${i + 1}. ${escapeHtml(ex.name)}</strong><div class="buttons"><button type="button" class="btn tiny" data-routine-move="up" data-routine-index="${i}">↑</button><button type="button" class="btn tiny" data-routine-move="down" data-routine-index="${i}">↓</button><button type="button" class="btn tiny danger" data-routine-remove="${i}">×</button></div></div><p class="subtext">${typeLabel[ex.type]} · ${sets.length}세트</p>${rows}<button type="button" class="btn tiny outline" data-routine-add-set="+">+ 세트 추가</button></div>`;
+    }).join('') : '<p class="subtext">운동 종목을 선택하면 여기에서 무게·횟수·세트를 설정할 수 있어.</p>';
+}
+function openRoutineDialog(id = null) {
+    editRoutineId = id;
+    const r = state.routines.find(x => x.id === id), f = el('routineForm');
+    f.elements.name.value = r ? r.name : '';
+    routineDraft = clone(r ? r.exerciseIds : []);
+    routinePlanDraft = {};
+    for (const exerciseId of routineDraft) {
+        const ex = exerciseById(exerciseId);
+        if (!ex || routinePlanDraft[exerciseId]) continue;
+        const planned = r && r.setPlans && r.setPlans[exerciseId];
+        const legacy = ex.defaultSets;
+        routinePlanDraft[exerciseId] = clone(Array.isArray(planned) && planned.length ? planned :
+            Array.isArray(legacy) && legacy.length ? legacy : [metricDefaults(ex)]);
+    }
+    el('routineExerciseSelect').innerHTML = '<option value="">종목을 선택해 추가</option>' + listOptions();
+    el('routineFormTitle').textContent = r ? '루틴 편집 · 세트별 목표' : '새 루틴 · 세트별 목표';
+    renderRoutineDraft(); el('routineDialog').showModal();
+}
+function saveRoutine() {
+    const f = el('routineForm'), name = f.elements.name.value.trim();
+    if (!name) return message('루틴 이름을 입력해 줘');
+    const prev = state.routines.find(r => r.id === editRoutineId);
+    const ids = routineDraft.filter(id => exerciseById(id));
+    if (!ids.length) return message('운동 종목을 하나 이상 추가해 줘');
+    const setPlans = {};
+    for (const id of ids) {
+        const ex = exerciseById(id), source = routinePlanDraft[id];
+        if (!Array.isArray(source) || !source.length) return message(`${ex.name}의 세트를 하나 이상 만들어 줘`);
+        if (source.length > 200) return message('한 운동은 최대 200세트까지 등록할 수 있어');
+        setPlans[id] = clone(source);
+    }
+    const rec = { id: prev ? prev.id : uuid(), name, exerciseIds: ids, setPlans,
+        createdAt: prev ? prev.createdAt : isoNow(), updatedAt: isoNow() };
+    if (prev) state.routines[withId(state.routines, rec.id)] = rec;
+    else state.routines.push(rec);
+    modified(); el('routineDialog').close(); renderAll();
+    message('세트별 목표를 포함해 루틴을 저장했어');
+}
 // Text routine import uses the same exerciseLibrary + routines schema as the manual editor.
 // It never overwrites existing exercises or previous workout records.
 function parseTextRoutineRow(line, lineNo) {
@@ -1640,16 +1691,52 @@ main.addEventListener('input', e => {
 });
 el('exerciseType').addEventListener('change', refreshExerciseMode);
 el('exerciseForm').addEventListener('submit', e => { e.preventDefault(); saveExerciseForm(); });
-el('routineExerciseSelect').addEventListener('change', e => { if (e.target.value) {
-    routineDraft.push(e.target.value);
+el('routineExerciseSelect').addEventListener('change', e => {
+    const id = e.target.value;
+    if (id) {
+        if (routineDraft.includes(id)) message('이미 추가한 종목이야. 여러 중량은 세트로 설정해 줘');
+        else {
+            routineDraft.push(id);
+            routinePlanDraft[id] = [metricDefaults(exerciseById(id))];
+            renderRoutineDraft();
+        }
+        e.target.value = '';
+    }
+});
+el('routineItems').addEventListener('input', e => {
+    const target = e.target, key = target.dataset.routineField;
+    if (!key) return;
+    const card = target.closest('[data-routine-exercise-id]'), row = target.closest('[data-routine-set-index]');
+    if (!card || !row) return;
+    const id = card.dataset.routineExerciseId, ix = Number(row.dataset.routineSetIndex);
+    const ex = exerciseById(id), set = routinePlanDraft[id] && routinePlanDraft[id][ix];
+    if (!ex || !set) return;
+    if (key === 'durationSeconds' && target.dataset.durationPart) {
+        const min = row.querySelector('[data-duration-part="min"]');
+        const sec = row.querySelector('[data-duration-part="sec"]');
+        set.durationSeconds = secondsFromParts(min && min.value, sec && sec.value);
+    } else set[key] = fromDisplay(key, target.value, ex.type);
+});
+el('routineItems').addEventListener('click', e => {
+    const b = e.target.closest('[data-routine-remove],[data-routine-move],[data-routine-add-set],[data-routine-remove-set]');
+    if (!b) return;
+    const card = b.closest('[data-routine-exercise-id]');
+    const id = card && card.dataset.routineExerciseId, sets = id && routinePlanDraft[id];
+    if (b.dataset.routineRemove !== undefined) {
+        const ix = Number(b.dataset.routineRemove);
+        const removed = routineDraft.splice(ix, 1)[0];
+        if (!routineDraft.includes(removed)) delete routinePlanDraft[removed];
+    } else if (b.dataset.routineMove !== undefined) {
+        move(routineDraft, Number(b.dataset.routineIndex), b.dataset.routineMove === 'up' ? -1 : 1);
+    } else if (b.dataset.routineAddSet !== undefined && sets) {
+        if (sets.length >= 200) return message('한 운동은 최대 200세트까지 추가할 수 있어');
+        sets.push(clone(sets[sets.length - 1] || metricDefaults(exerciseById(id))));
+    } else if (b.dataset.routineRemoveSet !== undefined && sets) {
+        if (sets.length <= 1) return message('세트는 최소 1개 필요해');
+        sets.splice(Number(b.dataset.routineRemoveSet), 1);
+    }
     renderRoutineDraft();
-    e.target.value = '';
-} });
-el('routineItems').addEventListener('click', e => { const b = e.target.closest('[data-routine-remove],[data-routine-move]'); if (!b)
-    return; if (b.dataset.routineRemove !== undefined)
-    routineDraft.splice(Number(b.dataset.routineRemove), 1);
-else
-    move(routineDraft, Number(b.dataset.routineIndex), b.dataset.routineMove === 'up' ? -1 : 1); renderRoutineDraft(); });
+});
 el('routineForm').addEventListener('submit', e => { e.preventDefault(); saveRoutine(); });
 el('textRoutineForm').addEventListener('submit', saveTextRoutine);
 el('textRoutineInput').addEventListener('input', updateTextRoutinePreview);
