@@ -162,7 +162,16 @@
     .rest-clock { height: 190px; width: 190px; }
     .rest-time { font-size: 2.8rem; }
 }
- .warmup-card{border:1px solid var(--accent);margin-bottom:12px}.warmup-select{justify-content:space-between;gap:12px;margin:12px 0}.warmup-minutes{font-size:1.35rem;color:var(--accent)}.warmup-remaining{text-align:center;color:var(--accent);font-size:3.3rem;font-weight:850;font-variant-numeric:tabular-nums;margin:14px 0}.routine-plan{padding:12px;margin:10px 0}.routine-plan>.row{align-items:flex-start;gap:8px}.routine-plan .template-row{margin:6px 0}\n@media (prefers-reduced-motion: reduce) {
+ .warmup-card{border:1px solid var(--accent);margin-bottom:12px}.warmup-select{justify-content:space-between;gap:12px;margin:12px 0}.warmup-minutes{font-size:1.35rem;color:var(--accent)}.warmup-remaining{text-align:center;color:var(--accent);font-size:3.3rem;font-weight:850;font-variant-numeric:tabular-nums;margin:14px 0}.routine-plan{padding:12px;margin:10px 0}.routine-plan>.row{align-items:flex-start;gap:8px}.routine-plan .template-row{margin:6px 0}\n/* Timed bodyweight holds: a red ring FILLS as work is completed. */
+.hold-overlay[hidden], .hold-chip[hidden] { display: none !important; }
+.hold-overlay { position:fixed; inset:0; z-index:31; background:rgba(2,4,8,.84); display:flex; align-items:center; justify-content:center; padding:22px; padding-bottom:calc(22px + env(safe-area-inset-bottom)); }
+.hold-dialog { border-color:#bd5858; }
+.hold-clock { background:conic-gradient(#e45b5b var(--hold-progress, 0%), #373b46 0); }
+.hold-time { color:#ff7373; }
+.hold-cancel { border:1px solid #985252; color:#ffc6c6; background:#382023; }
+.hold-chip { background:#392225; color:#ff8585; border-color:#e45b5b; bottom:calc(156px + env(safe-area-inset-bottom)); }
+@media (max-width:430px) { .hold-chip { bottom:calc(154px + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) {
     .rest-clock { transition: none; }
 }
 
@@ -311,6 +320,16 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 <section class="rest-dialog" role="dialog" aria-modal="true" aria-labelledby="restHeading" aria-describedby="restCaption"><p class="rest-caption" id="restCaption"></p><h2 id="restHeading">휴식 시간</h2><div class="rest-clock" id="restClock"><div class="rest-clock-inner"><span class="rest-time" id="restTime" role="timer" aria-live="off">01:30</span><span class="rest-status" id="restStatus">휴식 중</span></div></div><div class="rest-buttons" id="restRunningActions"><button class="rest-action" type="button" data-rest-action="decrease">−15초</button><button class="rest-action" type="button" data-rest-action="increase">+15초</button><button class="rest-action" type="button" data-rest-action="skip">건너뛰기</button></div><button class="rest-action rest-action-primary rest-action-wide" type="button" id="restMinimizeBtn" data-rest-action="minimize">작게 보기 · 운동 화면으로</button></section>
 </div>
 <button class="rest-chip" id="restChip" hidden type="button" aria-label="진행 중인 휴식 타이머 열기">휴식 <span id="restChipTime">00:00</span></button>
+<div class="hold-overlay" id="holdOverlay" hidden>
+  <section class="rest-dialog hold-dialog" role="dialog" aria-modal="true" aria-labelledby="holdHeading" aria-describedby="holdCaption">
+    <p class="rest-caption" id="holdCaption">시간 유지 운동</p>
+    <h2 id="holdHeading">운동 중</h2>
+    <div class="rest-clock hold-clock" id="holdClock"><div class="rest-clock-inner"><span class="rest-time hold-time" id="holdTime" role="timer" aria-live="off">00:30</span><span class="rest-status" id="holdStatus">운동 중 · 원형 게이지가 차오르면 완료</span></div></div>
+    <p class="subtext">설정한 시간이 끝나면 세트가 완료되고, 다음 세트가 남았으면 휴식 타이머로 자동 연결돼.</p>
+    <div class="rest-buttons"><button class="rest-action hold-cancel" type="button" data-hold-action="cancel">운동 취소</button><button class="rest-action rest-action-primary" type="button" data-hold-action="minimize">작게 보기</button></div>
+  </section>
+</div>
+<button class="rest-chip hold-chip" id="holdChip" hidden type="button" aria-label="진행 중인 시간 유지 운동 열기">운동 <span id="holdChipTime">00:00</span></button>
 <script>
 // Small compatibility shims for older mobile browsers.
 if (!Array.prototype.flatMap) {
@@ -774,6 +793,7 @@ function restartTodayWorkout() {
     // Retain the exact workout plan, item order, entered actual/target numbers,
     // rest settings, notes and assessments. Only set completion flags back to false.
     workoutRestTimer.cancel();
+    cancelTimedHold(true);
     for (const item of s.items) {
         for (const set of item.sets)
             set.completed = false;
@@ -798,6 +818,7 @@ function openDayAssessment() {
         return message('오늘의 운동 기록이 없어');
     if (s.status === 'completed')
         return message('완료된 운동은 다시하기로 새로 시작해 줘');
+    if (s.activeHold) { showHoldTimerModal(); return message('진행 중인 시간 유지 운동을 먼저 완료하거나 취소해 줘'); }
     if (!s.items.length)
         return message('운동을 하나 이상 추가해 줘');
     const f = el('dayAssessmentForm');
@@ -827,6 +848,143 @@ function startSession(name = '오늘 운동', exerciseIds = []) { const s = { id
 function dirtySession(s) { s.updatedAt = isoNow(); modified(); }
 function listOptions(used = []) { return state.exerciseLibrary.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} · ${typeLabel[e.type]}</option>`).join(''); }
 function isTodayLocked() { return state.sessions.some(x => x.date === localDate() && x.status === 'completed'); }
+
+/* Time-based bodyweight sets are completed only when their target hold timer expires.
+ * The timer's absolute deadline is saved in the workout session; it survives PWA reload.
+ * The existing rest timer begins only after completed work and only if later sets remain. */
+let timedHoldInterval = null;
+const holdOverlay = document.getElementById('holdOverlay');
+const holdChip = document.getElementById('holdChip');
+function formatHoldCountdown(milliseconds) {
+    const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+function hideHoldTimerUi() {
+    holdOverlay.hidden = true;
+    holdChip.hidden = true;
+}
+function stopHoldTicker() {
+    if (timedHoldInterval !== null) {
+        clearInterval(timedHoldInterval);
+        timedHoldInterval = null;
+    }
+}
+function showHoldTimerModal() {
+    const s = activeSession();
+    if (!s || !s.activeHold) return;
+    holdOverlay.hidden = false;
+    holdChip.hidden = true;
+    tickTimedHold();
+}
+function showHoldTimerChip() {
+    if (!activeSession() || !activeSession().activeHold) return;
+    holdOverlay.hidden = true;
+    holdChip.hidden = false;
+    tickTimedHold();
+}
+function cancelTimedHold(silent = false) {
+    const s = activeSession();
+    stopHoldTicker();
+    hideHoldTimerUi();
+    if (!s || !s.activeHold) return;
+    s.activeHold = null;
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    if (!silent) message('시간 유지 운동을 취소했어. 이 세트는 미완료야');
+}
+function finishTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold) return;
+    const run = s.activeHold;
+    stopHoldTicker();
+    hideHoldTimerUi();
+    // Clear the active timer BEFORE updating/rendering the session, to avoid re-entry.
+    s.activeHold = null;
+    const it = s.items.find(x => x.id === run.itemId);
+    const set = it && it.sets.find(x => x.id === run.setId);
+    if (!it || !set || set.completed || s.status === 'completed' || s.date !== localDate()) {
+        dirtySession(s);
+        if (tab === 'today') renderAll();
+        return;
+    }
+    set.completed = true;
+    if (!set.actual || typeof set.actual !== 'object') set.actual = {};
+    set.actual.durationSeconds = run.durationSeconds;
+    if (!s.startedAt) s.startedAt = new Date(run.startedAt).toISOString();
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    // Do not beep on an old completed timer after reopening the PWA long afterward.
+    const recent = Date.now() - run.endsAt < 5000;
+    if (recent) {
+        try { if (navigator.vibrate) navigator.vibrate([160, 90, 160]); } catch (_) {}
+    }
+    const ix = it.sets.indexOf(set);
+    const laterSetsRemain = it.sets.some((x,j) => j > ix && !x.completed);
+    const restSeconds = Number(it.restSeconds == null ? 90 : it.restSeconds);
+    // An expired hold from a backgrounded app should not restart a full rest.
+    const remainingRestSeconds = Math.ceil((run.endsAt + restSeconds * 1000 - Date.now()) / 1000);
+    if (laterSetsRemain && s.date === localDate() && restSeconds > 0 && remainingRestSeconds > 0) {
+        workoutRestTimer.start({
+            exerciseId: it.id, exerciseName: it.name, setNumber: ix + 1,
+            seconds: Math.min(restSeconds, remainingRestSeconds)
+        });
+    } else if (recent && tab === 'today') {
+        message('시간 유지 운동 완료! 다음 운동을 진행해 줘');
+    }
+}
+function tickTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
+        stopHoldTicker();
+        hideHoldTimerUi();
+        return;
+    }
+    const run = s.activeHold;
+    const remaining = run.endsAt - Date.now();
+    if (remaining <= 0) { finishTimedHold(); return; }
+    const durationMs = run.durationSeconds * 1000;
+    const elapsed = Math.max(0, durationMs - remaining);
+    const progress = Math.max(0, Math.min(100, elapsed / durationMs * 100));
+    const clock = document.getElementById('holdClock');
+    if (clock) clock.style.setProperty('--hold-progress', progress + '%');
+    const label = formatHoldCountdown(remaining);
+    document.getElementById('holdTime').textContent = label;
+    document.getElementById('holdChipTime').textContent = label;
+}
+function resumeTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
+        stopHoldTicker(); hideHoldTimerUi(); return;
+    }
+    if (timedHoldInterval === null) timedHoldInterval = setInterval(tickTimedHold, 250);
+    tickTimedHold();
+}
+function startTimedHold(s, it, set) {
+    if (s.activeHold) { showHoldTimerModal(); return; }
+    const value = Number(set.actual && set.actual.durationSeconds);
+    const fallback = Number(set.target && set.target.durationSeconds);
+    const seconds = Number.isFinite(value) && value > 0 ? value : fallback;
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86400)
+        return message('이 세트의 시간(초)을 먼저 1초~24시간으로 설정해 줘');
+    workoutRestTimer.cancel();
+    if (s.warmupStatus === 'running') stopWarmup(false);
+    const startedAt = Date.now();
+    if (!s.startedAt) s.startedAt = new Date(startedAt).toISOString();
+    s.activeHold = { itemId: it.id, setId: set.id, startedAt, endsAt: startedAt + seconds * 1000, durationSeconds: seconds };
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    showHoldTimerModal();
+    resumeTimedHold();
+}
+holdOverlay.addEventListener('click', e => {
+    const control = e.target.closest('[data-hold-action]');
+    if (!control) return;
+    if (control.dataset.holdAction === 'cancel') cancelTimedHold();
+    if (control.dataset.holdAction === 'minimize') showHoldTimerChip();
+});
+holdChip.addEventListener('click', showHoldTimerModal);
+document.addEventListener('visibilitychange', tickTimedHold);
+window.addEventListener('pageshow', tickTimedHold);
 function renderWarmupPanel(s) {
     if (s.status === 'completed') return '';
     const mins = Number(s.warmupMinutes) || 5;
@@ -945,9 +1103,9 @@ function renderSetRow(it, se, i) {
         const target = part ? durationPart(t.durationSeconds, part) : toDisplay(key, t[key], kind);
         return `<div>${fixedUnitInput({ key, unit, value: actual, aria: `${it.name} ${i + 1}세트 ${unit}`, attrs: `step="${step}" ${part === 'sec' ? 'max="59"' : ''}`, part })}<div class="target">목표: ${escapeHtml(target === '' ? '—' : target)}${unit}</div></div>`;
     }).join('');
-    return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : '완료'}" data-item-action="toggle-set">${se.completed ? '✓' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
+    return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : hold ? '시간 유지 운동 시작' : '완료'}" title="${hold && !se.completed ? '운동 타이머 시작' : ''}" data-item-action="toggle-set">${se.completed ? '✓' : hold ? '▶' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
 }
-function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">운동 종목과 목표 세트를 자유롭게 등록하고 편집할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
+function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">여기에는 운동 종목만 등록해. 목표 중량·횟수·세트는 루틴에서 설정할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
 function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · 루틴에서 세트별 목표 설정</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
 function countRoutineDuplicateNames(r) {
     const seen = new Map();
@@ -1468,7 +1626,7 @@ catch (e) {
     message('가져오기 실패: ' + e.message);
     return;
 } if (!confirm(`이 기기의 기록 ${state.sessions.length}개 세션, 운동 ${state.exerciseLibrary.length}개를 가져온 파일의 데이터로 모두 바꿀까?\n\n이 작업은 되돌릴 수 없어. 기존 자료를 먼저 백업해 줘.`))
-    return; workoutRestTimer.cancel(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); message('백업 파일을 복원했어'); }
+    return; workoutRestTimer.cancel(); stopHoldTicker(); hideHoldTimerUi(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); resumeTimedHold(); message('백업 파일을 복원했어'); }
 function install() { if (!installedPrompt) {
     message('HTTPS 배포 후 브라우저 메뉴에서 홈 화면에 추가해 줘');
     return;
@@ -1625,6 +1783,10 @@ main.addEventListener('click', e => {
     const it = s.items.find(x => x.id === card.dataset.itemId);
     if (!it)
         return;
+    if (s.activeHold && (b.dataset.setAction || b.dataset.itemAction || b.dataset.itemMove)) {
+        if (b.dataset.itemAction !== 'toggle-set') message('시간 유지 운동이 진행 중이야. 완료하거나 취소한 뒤 수정해 줘');
+        if (b.dataset.itemAction !== 'toggle-set') return;
+    }
     const setAct = b.dataset.setAction;
     if (setAct) {
         const se = it.sets.find(x => { var _a; return x.id === ((_a = b.closest('[data-set-id]')) === null || _a === void 0 ? void 0 : _a.dataset.setId); });
@@ -1670,6 +1832,15 @@ main.addEventListener('click', e => {
                 const row = b.closest('[data-set-id]'), se = it.sets.find(x => x.id === (row === null || row === void 0 ? void 0 : row.dataset.setId));
                 if (!se)
                     return;
+                if (s.activeHold) {
+                    if (s.activeHold.setId === se.id) showHoldTimerModal();
+                    else message('다른 시간 유지 세트가 진행 중이야. 먼저 완료하거나 취소해 줘');
+                    return;
+                }
+                if (!se.completed && it.type === 'bodyweight' && (it.bodyweightMode || 'reps') === 'duration') {
+                    startTimedHold(s, it, se);
+                    return;
+                }
                 se.completed = !se.completed;
                 if (se.completed && !s.startedAt)
                     s.startedAt = isoNow();
@@ -1847,6 +2018,8 @@ if ('serviceWorker' in navigator && ['https:', 'http:'].includes(location.protoc
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('PWA:', e)));
 initStorage().then(() => {
     refreshWarmupTimer();
+    resumeTimedHold();
+    if (activeSession() && activeSession().activeHold) showHoldTimerModal();
     const notice = el('startupAlert');
     if (notice && !window.__workoutRuntimeError)
         notice.hidden = true;
