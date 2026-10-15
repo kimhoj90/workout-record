@@ -248,15 +248,15 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 <form id="exerciseForm"><div class="dialog-head"><h2 id="exerciseFormTitle">운동 추가</h2><button class="btn tiny ghost" type="button" data-close-dialog="exerciseDialog" aria-label="닫기">닫기 ×</button></div>
 <div class="dialog-body">
 <label class="field-label">운동명 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 바벨 스쿼트"></label>
-<div class="form-grid"><label class="field-label">운동 유형<select class="select" name="type" id="exerciseType"><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></label><label class="field-label" id="exerciseRestRow">휴식시간 (초)<input class="input" name="restSeconds" type="number" min="0" max="1800" step="1" value="90" required></label></div>
+<div class="form-grid"><label class="field-label">운동 유형<select class="select" name="type" id="exerciseType"><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></label></div>
 <label class="field-label">유의사항<textarea class="area" name="caution" rows="2" placeholder="예: 허리 중립 유지"></textarea></label>
 <label class="field-label">분류 태그 (쉼표로 구분)<input class="input" name="tags" placeholder="하체, 근력"></label>
 <div id="bodyweightModeRow"><label class="field-label">맨손운동 측정 방식<select class="select" name="bodyweightMode" id="bodyweightMode"><option value="reps">반복 횟수</option><option value="duration">유지 시간</option></select></label></div>
-<div><div class="row between"><strong>기본 세트 / 라운드</strong><button class="btn tiny outline" type="button" id="addTemplateSet">+ 세트 추가</button></div><div id="templateSets"></div></div>
+<p class="subtext">운동 목록에서는 종목만 등록해. <strong>목표 무게·횟수·시간·세트는 루틴에서</strong> 설정해 줘.</p>
 </div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="exerciseDialog">취소</button><button class="btn main" type="submit">저장하기</button></div>
 </form></dialog>
 <dialog id="routineDialog" aria-labelledby="routineFormTitle"><form id="routineForm"><div class="dialog-head"><h2 id="routineFormTitle">루틴 만들기</h2><button class="btn tiny ghost" type="button" data-close-dialog="routineDialog">닫기 ×</button></div>
-<div class="dialog-body"><label class="field-label">루틴 이름 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 월요일 상체"></label><label class="field-label">운동 추가<select class="select" id="routineExerciseSelect"><option value="">선택해서 추가</option></select></label><div id="routineItems"></div></div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="routineDialog">취소</button><button class="btn main" type="submit">루틴 저장</button></div></form></dialog>
+<div class="dialog-body"><label class="field-label">루틴 이름 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 월요일 상체"></label><label class="field-label">운동 추가<select class="select" id="routineExerciseSelect"><option value="">선택해서 추가</option></select></label><p class="subtext">루틴에 종목을 추가하고 각 세트마다 무게·횟수·시간을 입력해. 다른 날에는 같은 종목으로 별도 루틴을 만들 수 있어.</p><div id="routineItems"></div></div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="routineDialog">취소</button><button class="btn main" type="submit">루틴 저장</button></div></form></dialog>
 
 <dialog id="textRoutineDialog" aria-labelledby="textRoutineTitle">
 <form id="textRoutineForm">
@@ -610,7 +610,7 @@ const localDate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() 
 const clone = x => JSON.parse(JSON.stringify(x));
 const typeLabel = { weight: '중량운동', bodyweight: '맨손운동', cardio: '유산소' };
 const defaultApp = () => ({ schemaVersion: 2, exerciseLibrary: [], routines: [], sessions: [], settings: { goal: '' }, createdAt: isoNow() });
-let state = defaultApp(), tab = 'today', activeSessionId = null, historyDetailId = null, historyYear = null, historyMonth = null, editExerciseId = null, editRoutineId = null, templateDraft = [], routineDraft = [], storageBackend = '확인 중', db = null, writeChain = Promise.resolve(), installedPrompt = null;
+let state = defaultApp(), tab = 'today', activeSessionId = null, historyDetailId = null, historyYear = null, historyMonth = null, editExerciseId = null, editRoutineId = null, routineDraft = [], storageBackend = '확인 중', db = null, writeChain = Promise.resolve(), installedPrompt = null;
 const el = id => document.getElementById(id);
 const exerciseById = id => state.exerciseLibrary.find(x => x.id === id);
 const sessionById = id => state.sessions.find(x => x.id === id);
@@ -863,7 +863,7 @@ function renderSetRow(it, se, i) {
     return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : '완료'}" data-item-action="toggle-set">${se.completed ? '✓' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
 }
 function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">운동 종목과 목표 세트를 자유롭게 등록하고 편집할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
-function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · ${((_a = e.defaultSets) === null || _a === void 0 ? void 0 : _a.length) || 0}세트${e.type === 'cardio' ? '' : ` · 휴식 ${(_b = e.restSeconds) !== null && _b !== void 0 ? _b : 90}초`}</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
+function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · 루틴에서 세트별 목표 설정</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
 function countRoutineDuplicateNames(r) {
     const seen = new Map();
     let count = 0;
@@ -978,33 +978,42 @@ function addToToday(id) { const ex = exerciseById(id); if (!ex)
     s.startedAt = isoNow(); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
 function move(arr, i, dir) { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length)
     return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; }
-function renderTemplateSets() {
-    const type = el('exerciseType').value, mode = el('bodyweightMode').value;
-    const cardio = type === 'cardio';
-    el('exerciseRestRow').style.display = cardio ? 'none' : '';
-    el('exerciseForm').elements.restSeconds.disabled = cardio;
-    el('bodyweightModeRow').hidden = type !== 'bodyweight';
-    const isHold = type === 'bodyweight' && mode === 'duration';
-    const fields = type === 'weight' ? [['weightKg', 'kg', '중량', .5], ['reps', '개', '횟수', 1]] :
-        isHold ? [['durationSeconds', '분', '유지 시간(분)', 1, 'min'], ['durationSeconds', '초', '유지 시간(초)', 1, 'sec']] :
-            type === 'bodyweight' ? [['reps', '개', '횟수', 1]] :
-                [['durationSeconds', '분', '운동시간', .5], ['distanceMeters', 'km', '이동거리', .1], ['heartRate', 'bpm', '평균심박', 1]];
-    el('templateSets').innerHTML = templateDraft.map((s, i) => {
-        const fs = fields.map(([k, unit, label, step, part]) => {
-            const v = part ? durationPart(s.durationSeconds, part) : toDisplay(k, s[k], type);
-            return fixedUnitInput({ key: k, unit, value: v, aria: `${i + 1}세트 ${label}`, attrs: `step="${step}" ${part === 'sec' ? 'max="59"' : ''}`, draft: true, part });
-        }).join('');
-        return `<div class="template-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''}" data-draft-index="${i}"><span class="small-label">${i + 1}</span>${fs}<button class="btn tiny danger" type="button" data-remove-template="${i}" aria-label="${i + 1}세트 삭제" title="세트 삭제">×</button></div>`;
-    }).join('') || '<p class="subtext">세트가 없어. 추가 버튼으로 넣어 줘.</p>';
+function refreshExerciseMode() {
+    el('bodyweightModeRow').hidden = el('exerciseType').value !== 'bodyweight';
 }
-function openExerciseDialog(id = null) { var _a; editExerciseId = id; const ex = exerciseById(id); const f = el('exerciseForm'); f.reset(); f.elements.name.value = (ex === null || ex === void 0 ? void 0 : ex.name) || ''; f.elements.type.value = (ex === null || ex === void 0 ? void 0 : ex.type) || 'weight'; f.elements.restSeconds.value = (_a = ex === null || ex === void 0 ? void 0 : ex.restSeconds) !== null && _a !== void 0 ? _a : 90; f.elements.caution.value = (ex === null || ex === void 0 ? void 0 : ex.caution) || ''; f.elements.tags.value = ((ex === null || ex === void 0 ? void 0 : ex.tags) || []).join(', '); f.elements.bodyweightMode.value = (ex === null || ex === void 0 ? void 0 : ex.bodyweightMode) || 'reps'; templateDraft = ex ? clone(ex.defaultSets) : [metricDefaults({ type: 'weight' })]; el('exerciseFormTitle').textContent = ex ? '운동 수정' : '운동 추가'; renderTemplateSets(); el('exerciseDialog').showModal(); }
-function saveExerciseForm() { const f = el('exerciseForm'); const name = f.elements.name.value.trim(); if (!name) {
-    message('운동명을 입력해 줘');
-    return;
-} const type = f.elements.type.value, mode = f.elements.bodyweightMode.value; const rest = type === 'cardio' ? 0 : Math.round(Math.min(1800, Math.max(0, Number(f.elements.restSeconds.value) || 0))); const ex = editExerciseId ? exerciseById(editExerciseId) : null; const sets = templateDraft.map(s => { const keys = type === 'weight' ? ['weightKg', 'reps'] : type === 'bodyweight' ? [mode === 'duration' ? 'durationSeconds' : 'reps'] : ['durationSeconds', 'distanceMeters', 'heartRate']; return Object.fromEntries(keys.map(k => [k, numeric(s[k])])); }); const rec = { id: (ex === null || ex === void 0 ? void 0 : ex.id) || uuid(), name, type, caution: f.elements.caution.value.trim(), tags: f.elements.tags.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 20), bodyweightMode: mode, restSeconds: rest, defaultSets: sets, createdAt: (ex === null || ex === void 0 ? void 0 : ex.createdAt) || isoNow(), updatedAt: isoNow() }; if (ex)
-    state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = rec;
-else
-    state.exerciseLibrary.push(rec); modified(); el('exerciseDialog').close(); renderAll(); message(ex ? '운동을 수정했어' : '새 운동을 만들었어'); }
+function openExerciseDialog(id = null) {
+    editExerciseId = id;
+    const ex = exerciseById(id), f = el('exerciseForm');
+    f.reset();
+    f.elements.name.value = ex ? ex.name : '';
+    f.elements.type.value = ex ? ex.type : 'weight';
+    f.elements.caution.value = ex ? (ex.caution || '') : '';
+    f.elements.tags.value = ex ? (ex.tags || []).join(', ') : '';
+    f.elements.bodyweightMode.value = ex ? (ex.bodyweightMode || 'reps') : 'reps';
+    el('exerciseFormTitle').textContent = ex ? '종목 수정' : '종목 추가';
+    refreshExerciseMode();
+    el('exerciseDialog').showModal();
+}
+function saveExerciseForm() {
+    const f = el('exerciseForm'), name = f.elements.name.value.trim();
+    if (!name) return message('운동명을 입력해 줘');
+    const ex = editExerciseId ? exerciseById(editExerciseId) : null;
+    const type = f.elements.type.value;
+    const record = {
+        id: ex ? ex.id : uuid(), name, type,
+        caution: f.elements.caution.value.trim(),
+        tags: f.elements.tags.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 20),
+        bodyweightMode: type === 'bodyweight' ? f.elements.bodyweightMode.value : 'reps',
+        // Preserve old catalog presets for older routines, but do not assign new exercise plans.
+        defaultSets: ex ? clone(ex.defaultSets || []) : [],
+        restSeconds: ex ? (ex.restSeconds == null ? 90 : ex.restSeconds) : (type === 'cardio' ? 0 : 90),
+        createdAt: ex ? ex.createdAt : isoNow(), updatedAt: isoNow()
+    };
+    if (ex) state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = record;
+    else state.exerciseLibrary.push(record);
+    modified(); el('exerciseDialog').close(); renderAll();
+    message(ex ? '종목을 수정했어' : '새 종목을 만들었어');
+}
 function renderRoutineDraft() { el('routineItems').innerHTML = routineDraft.length ? routineDraft.map((id, i) => { var _a; return `<div class="chip"><span>${i + 1}. ${escapeHtml(((_a = exerciseById(id)) === null || _a === void 0 ? void 0 : _a.name) || '삭제된 운동')}</span><div class="buttons"><button type="button" class="btn tiny" data-routine-move="up" data-routine-index="${i}">↑</button><button type="button" class="btn tiny" data-routine-move="down" data-routine-index="${i}">↓</button><button type="button" class="btn tiny danger" data-routine-remove="${i}">×</button></div></div>`; }).join('') : '<p class="subtext">등록된 종목이 없어. 위에서 선택해 추가해 줘.</p>'; }
 function openRoutineDialog(id = null) { editRoutineId = id; const r = state.routines.find(x => x.id === id), f = el('routineForm'); f.elements.name.value = (r === null || r === void 0 ? void 0 : r.name) || ''; routineDraft = clone((r === null || r === void 0 ? void 0 : r.exerciseIds) || []); el('routineExerciseSelect').innerHTML = '<option value="">종목을 선택해 추가</option>' + listOptions(); el('routineFormTitle').textContent = r ? '루틴 편집' : '새 루틴'; renderRoutineDraft(); el('routineDialog').showModal(); }
 function saveRoutine() { const f = el('routineForm'), name = f.elements.name.value.trim(); if (!name) {
@@ -1147,7 +1156,7 @@ function saveTextRoutine(event) {
             const now = isoNow();
             ex = { id: uuid(), name: group.name, type: group.type, caution: '', tags: [],
                 bodyweightMode: group.bodyweightMode, restSeconds: group.type === 'cardio' ? 0 : 90,
-                defaultSets: clone(group.defaultSets), createdAt: now, updatedAt: now };
+                defaultSets: [], createdAt: now, updatedAt: now };
             toAdd.push(ex);
         }
         ids.push(ex.id);
@@ -1629,28 +1638,7 @@ main.addEventListener('input', e => {
         dirtySession(s);
     }
 });
-el('exerciseType').addEventListener('change', () => { templateDraft = [metricDefaults({ type: el('exerciseType').value, bodyweightMode: el('bodyweightMode').value })]; renderTemplateSets(); });
-el('bodyweightMode').addEventListener('change', () => { templateDraft = templateDraft.map(() => metricDefaults({ type: 'bodyweight', bodyweightMode: el('bodyweightMode').value })); renderTemplateSets(); });
-el('templateSets').addEventListener('input', e => {
-    var _a, _b, _c;
-    const key = e.target.dataset.draftField;
-    if (!key)
-        return;
-    const ix = Number((_a = e.target.closest('[data-draft-index]')) === null || _a === void 0 ? void 0 : _a.dataset.draftIndex);
-    if (templateDraft[ix]) {
-        if (key === 'durationSeconds' && e.target.dataset.durationPart) {
-            const row = e.target.closest('[data-draft-index]');
-            const min = (_b = row.querySelector('[data-duration-part="min"]')) === null || _b === void 0 ? void 0 : _b.value;
-            const sec = (_c = row.querySelector('[data-duration-part="sec"]')) === null || _c === void 0 ? void 0 : _c.value;
-            templateDraft[ix].durationSeconds = secondsFromParts(min, sec);
-        }
-        else
-            templateDraft[ix][key] = fromDisplay(key, e.target.value, el('exerciseType').value);
-    }
-});
-el('templateSets').addEventListener('click', e => { const b = e.target.closest('[data-remove-template]'); if (!b)
-    return; templateDraft.splice(Number(b.dataset.removeTemplate), 1); renderTemplateSets(); });
-el('addTemplateSet').addEventListener('click', () => { const t = el('exerciseType').value, m = el('bodyweightMode').value; templateDraft.push(clone(templateDraft[templateDraft.length - 1] || metricDefaults({ type: t, bodyweightMode: m }))); renderTemplateSets(); });
+el('exerciseType').addEventListener('change', refreshExerciseMode);
 el('exerciseForm').addEventListener('submit', e => { e.preventDefault(); saveExerciseForm(); });
 el('routineExerciseSelect').addEventListener('change', e => { if (e.target.value) {
     routineDraft.push(e.target.value);
