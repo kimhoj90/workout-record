@@ -162,6 +162,15 @@
     .rest-clock { height: 190px; width: 190px; }
     .rest-time { font-size: 2.8rem; }
 }
+ .warmup-card{border:1px solid var(--accent);margin-bottom:12px}.warmup-select{justify-content:space-between;gap:12px;margin:12px 0}.warmup-minutes{font-size:1.35rem;color:var(--accent)}.warmup-remaining{text-align:center;color:var(--accent);font-size:3.3rem;font-weight:850;font-variant-numeric:tabular-nums;margin:14px 0}.routine-plan{padding:12px;margin:10px 0}.routine-plan>.row{align-items:flex-start;gap:8px}.routine-plan .template-row{margin:6px 0}\n/* Timed bodyweight holds: a red ring FILLS as work is completed. */
+.hold-overlay[hidden], .hold-chip[hidden] { display: none !important; }
+.hold-overlay { position:fixed; inset:0; z-index:31; background:rgba(2,4,8,.84); display:flex; align-items:center; justify-content:center; padding:22px; padding-bottom:calc(22px + env(safe-area-inset-bottom)); }
+.hold-dialog { border-color:#bd5858; }
+.hold-clock { background:conic-gradient(#e45b5b var(--hold-progress, 0%), #373b46 0); }
+.hold-time { color:#ff7373; }
+.hold-cancel { border:1px solid #985252; color:#ffc6c6; background:#382023; }
+.hold-chip { background:#392225; color:#ff8585; border-color:#e45b5b; bottom:calc(156px + env(safe-area-inset-bottom)); }
+@media (max-width:430px) { .hold-chip { bottom:calc(154px + env(safe-area-inset-bottom)); } }
 @media (prefers-reduced-motion: reduce) {
     .rest-clock { transition: none; }
 }
@@ -248,15 +257,15 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 <form id="exerciseForm"><div class="dialog-head"><h2 id="exerciseFormTitle">운동 추가</h2><button class="btn tiny ghost" type="button" data-close-dialog="exerciseDialog" aria-label="닫기">닫기 ×</button></div>
 <div class="dialog-body">
 <label class="field-label">운동명 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 바벨 스쿼트"></label>
-<div class="form-grid"><label class="field-label">운동 유형<select class="select" name="type" id="exerciseType"><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></label><label class="field-label" id="exerciseRestRow">휴식시간 (초)<input class="input" name="restSeconds" type="number" min="0" max="1800" step="1" value="90" required></label></div>
+<div class="form-grid"><label class="field-label">운동 유형<select class="select" name="type" id="exerciseType"><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></label></div>
 <label class="field-label">유의사항<textarea class="area" name="caution" rows="2" placeholder="예: 허리 중립 유지"></textarea></label>
 <label class="field-label">분류 태그 (쉼표로 구분)<input class="input" name="tags" placeholder="하체, 근력"></label>
 <div id="bodyweightModeRow"><label class="field-label">맨손운동 측정 방식<select class="select" name="bodyweightMode" id="bodyweightMode"><option value="reps">반복 횟수</option><option value="duration">유지 시간</option></select></label></div>
-<div><div class="row between"><strong>기본 세트 / 라운드</strong><button class="btn tiny outline" type="button" id="addTemplateSet">+ 세트 추가</button></div><div id="templateSets"></div></div>
+<p class="subtext">운동 목록에서는 종목만 등록해. <strong>목표 무게·횟수·시간·세트는 루틴에서</strong> 설정해 줘.</p>
 </div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="exerciseDialog">취소</button><button class="btn main" type="submit">저장하기</button></div>
 </form></dialog>
 <dialog id="routineDialog" aria-labelledby="routineFormTitle"><form id="routineForm"><div class="dialog-head"><h2 id="routineFormTitle">루틴 만들기</h2><button class="btn tiny ghost" type="button" data-close-dialog="routineDialog">닫기 ×</button></div>
-<div class="dialog-body"><label class="field-label">루틴 이름 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 월요일 상체"></label><label class="field-label">운동 추가<select class="select" id="routineExerciseSelect"><option value="">선택해서 추가</option></select></label><div id="routineItems"></div></div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="routineDialog">취소</button><button class="btn main" type="submit">루틴 저장</button></div></form></dialog>
+<div class="dialog-body"><label class="field-label">루틴 이름 <span class="required">*</span><input class="input" name="name" maxlength="80" required placeholder="예: 월요일 상체"></label><label class="field-label">운동 추가<select class="select" id="routineExerciseSelect"><option value="">선택해서 추가</option></select></label><p class="subtext">루틴에 종목을 추가하고 각 세트마다 무게·횟수·시간을 입력해. 다른 날에는 같은 종목으로 별도 루틴을 만들 수 있어.</p><div id="routineItems"></div></div><div class="dialog-foot"><button class="btn" type="button" data-close-dialog="routineDialog">취소</button><button class="btn main" type="submit">루틴 저장</button></div></form></dialog>
 
 <dialog id="textRoutineDialog" aria-labelledby="textRoutineTitle">
 <form id="textRoutineForm">
@@ -311,6 +320,16 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 <section class="rest-dialog" role="dialog" aria-modal="true" aria-labelledby="restHeading" aria-describedby="restCaption"><p class="rest-caption" id="restCaption"></p><h2 id="restHeading">휴식 시간</h2><div class="rest-clock" id="restClock"><div class="rest-clock-inner"><span class="rest-time" id="restTime" role="timer" aria-live="off">01:30</span><span class="rest-status" id="restStatus">휴식 중</span></div></div><div class="rest-buttons" id="restRunningActions"><button class="rest-action" type="button" data-rest-action="decrease">−15초</button><button class="rest-action" type="button" data-rest-action="increase">+15초</button><button class="rest-action" type="button" data-rest-action="skip">건너뛰기</button></div><button class="rest-action rest-action-primary rest-action-wide" type="button" id="restMinimizeBtn" data-rest-action="minimize">작게 보기 · 운동 화면으로</button></section>
 </div>
 <button class="rest-chip" id="restChip" hidden type="button" aria-label="진행 중인 휴식 타이머 열기">휴식 <span id="restChipTime">00:00</span></button>
+<div class="hold-overlay" id="holdOverlay" hidden>
+  <section class="rest-dialog hold-dialog" role="dialog" aria-modal="true" aria-labelledby="holdHeading" aria-describedby="holdCaption">
+    <p class="rest-caption" id="holdCaption">시간 유지 운동</p>
+    <h2 id="holdHeading">운동 중</h2>
+    <div class="rest-clock hold-clock" id="holdClock"><div class="rest-clock-inner"><span class="rest-time hold-time" id="holdTime" role="timer" aria-live="off">00:30</span><span class="rest-status" id="holdStatus">운동 중 · 원형 게이지가 차오르면 완료</span></div></div>
+    <p class="subtext">설정한 시간이 끝나면 세트가 완료되고, 다음 세트가 남았으면 휴식 타이머로 자동 연결돼.</p>
+    <div class="rest-buttons"><button class="rest-action hold-cancel" type="button" data-hold-action="cancel">운동 취소</button><button class="rest-action rest-action-primary" type="button" data-hold-action="minimize">작게 보기</button></div>
+  </section>
+</div>
+<button class="rest-chip hold-chip" id="holdChip" hidden type="button" aria-label="진행 중인 시간 유지 운동 열기">운동 <span id="holdChipTime">00:00</span></button>
 <script>
 // Small compatibility shims for older mobile browsers.
 if (!Array.prototype.flatMap) {
@@ -610,7 +629,7 @@ const localDate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() 
 const clone = x => JSON.parse(JSON.stringify(x));
 const typeLabel = { weight: '중량운동', bodyweight: '맨손운동', cardio: '유산소' };
 const defaultApp = () => ({ schemaVersion: 2, exerciseLibrary: [], routines: [], sessions: [], settings: { goal: '' }, createdAt: isoNow() });
-let state = defaultApp(), tab = 'today', activeSessionId = null, historyDetailId = null, historyYear = null, historyMonth = null, editExerciseId = null, editRoutineId = null, templateDraft = [], routineDraft = [], storageBackend = '확인 중', db = null, writeChain = Promise.resolve(), installedPrompt = null;
+let state = defaultApp(), tab = 'today', activeSessionId = null, historyDetailId = null, historyYear = null, historyMonth = null, editExerciseId = null, editRoutineId = null, routineDraft = [], storageBackend = '확인 중', db = null, writeChain = Promise.resolve(), installedPrompt = null;
 const el = id => document.getElementById(id);
 const exerciseById = id => state.exerciseLibrary.find(x => x.id === id);
 const sessionById = id => state.sessions.find(x => x.id === id);
@@ -734,8 +753,8 @@ function historyTimeLabel(iso) { if (!iso)
     return null; return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function workoutDurationLabel(s) {
     if (s.status !== 'completed') return null;
-    // Old v2 records may only have createdAt. Never fabricate duration when a timestamp is invalid.
-    const start = Date.parse(s.startedAt || s.createdAt || '');
+    // Legacy records can fall back to createdAt, new sessions cannot.
+    const start = Date.parse(s.startedAt || (s.startMode === 'warmup' ? '' : s.createdAt) || '');
     const end = Date.parse(s.completedAt || '');
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '미기록';
     const minutes = Math.floor((end - start) / 60000);
@@ -745,7 +764,7 @@ function workoutDurationLabel(s) {
 }
 function historyTimeRange(s) {
     // Older v2 records have no startedAt; their creation time is the only available fallback.
-    const start = historyTimeLabel(s.startedAt || s.createdAt);
+    const start = historyTimeLabel(s.startedAt || (s.startMode === 'warmup' ? null : s.createdAt));
     const end = s.status === 'completed' ? historyTimeLabel(s.completedAt) : null;
     const range = `${start ? `시작 ${start}` : '시작시간 미기록'} ~ ${s.status === 'completed' ? (end ? `완료 ${end}` : '완료시간 미기록') : '진행 중'}`;
     return s.status === 'completed' ? `${range} · 총 운동시간 ${workoutDurationLabel(s)}` : range;
@@ -774,13 +793,17 @@ function restartTodayWorkout() {
     // Retain the exact workout plan, item order, entered actual/target numbers,
     // rest settings, notes and assessments. Only set completion flags back to false.
     workoutRestTimer.cancel();
+    cancelTimedHold(true);
     for (const item of s.items) {
         for (const set of item.sets)
             set.completed = false;
     }
     // Unlock this same day's session for a fresh pass; replace completion times.
     s.status = 'active';
-    s.startedAt = isoNow();
+    s.startedAt = null;
+    s.warmupEndsAt = null;
+    s.warmupStatus = 'idle';
+    s.warmupMinutes = s.warmupMinutes || 5;
     s.completedAt = null;
     historyDetailId = null;
     el('restartDialog').close();
@@ -795,6 +818,7 @@ function openDayAssessment() {
         return message('오늘의 운동 기록이 없어');
     if (s.status === 'completed')
         return message('완료된 운동은 다시하기로 새로 시작해 줘');
+    if (s.activeHold) { showHoldTimerModal(); return message('진행 중인 시간 유지 운동을 먼저 완료하거나 취소해 줘'); }
     if (!s.items.length)
         return message('운동을 하나 이상 추가해 줘');
     const f = el('dayAssessmentForm');
@@ -815,21 +839,240 @@ function saveDayAssessment() {
     s.completedAt = isoNow();
     dirtySession(s);
     workoutRestTimer.cancel();
+    stopWarmup(false);
     el('dayAssessmentDialog').close();
     renderAll();
     message('운동 평가와 기록을 저장했어');
 }
-function startSession(name = '오늘 운동', exerciseIds = []) { const s = { id: uuid(), date: localDate(), name: name || '오늘 운동', status: 'active', items: exerciseIds.map(exerciseById).filter(Boolean).map(newItem), sessionNotes: '', condition: '', fatigue: null, createdAt: isoNow(), startedAt: exerciseIds.length ? isoNow() : null, updatedAt: isoNow(), completedAt: null }; state.sessions.push(s); activeSessionId = s.id; modified(); setTab('today'); message('오늘 운동을 준비했어'); return s; }
+function startSession(name = '오늘 운동', exerciseIds = []) { const s = { id: uuid(), date: localDate(), name: name || '오늘 운동', status: 'active', items: exerciseIds.map(exerciseById).filter(Boolean).map(newItem), sessionNotes: '', condition: '', fatigue: null, createdAt: isoNow(), startedAt: null, startMode: 'warmup', warmupMinutes: 5, warmupEndsAt: null, warmupStatus: 'idle', updatedAt: isoNow(), completedAt: null }; state.sessions.push(s); activeSessionId = s.id; modified(); setTab('today'); message('오늘 운동을 준비했어'); return s; }
 function dirtySession(s) { s.updatedAt = isoNow(); modified(); }
 function listOptions(used = []) { return state.exerciseLibrary.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} · ${typeLabel[e.type]}</option>`).join(''); }
 function isTodayLocked() { return state.sessions.some(x => x.date === localDate() && x.status === 'completed'); }
+
+/* Time-based bodyweight sets are completed only when their target hold timer expires.
+ * The timer's absolute deadline is saved in the workout session; it survives PWA reload.
+ * The existing rest timer begins only after completed work and only if later sets remain. */
+let timedHoldInterval = null;
+const holdOverlay = document.getElementById('holdOverlay');
+const holdChip = document.getElementById('holdChip');
+function formatHoldCountdown(milliseconds) {
+    const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+function hideHoldTimerUi() {
+    holdOverlay.hidden = true;
+    holdChip.hidden = true;
+}
+function stopHoldTicker() {
+    if (timedHoldInterval !== null) {
+        clearInterval(timedHoldInterval);
+        timedHoldInterval = null;
+    }
+}
+function showHoldTimerModal() {
+    const s = activeSession();
+    if (!s || !s.activeHold) return;
+    holdOverlay.hidden = false;
+    holdChip.hidden = true;
+    tickTimedHold();
+}
+function showHoldTimerChip() {
+    if (!activeSession() || !activeSession().activeHold) return;
+    holdOverlay.hidden = true;
+    holdChip.hidden = false;
+    tickTimedHold();
+}
+function cancelTimedHold(silent = false) {
+    const s = activeSession();
+    stopHoldTicker();
+    hideHoldTimerUi();
+    if (!s || !s.activeHold) return;
+    s.activeHold = null;
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    if (!silent) message('시간 유지 운동을 취소했어. 이 세트는 미완료야');
+}
+function finishTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold) return;
+    const run = s.activeHold;
+    stopHoldTicker();
+    hideHoldTimerUi();
+    // Clear the active timer BEFORE updating/rendering the session, to avoid re-entry.
+    s.activeHold = null;
+    const it = s.items.find(x => x.id === run.itemId);
+    const set = it && it.sets.find(x => x.id === run.setId);
+    if (!it || !set || set.completed || s.status === 'completed' || s.date !== localDate()) {
+        dirtySession(s);
+        if (tab === 'today') renderAll();
+        return;
+    }
+    set.completed = true;
+    if (!set.actual || typeof set.actual !== 'object') set.actual = {};
+    set.actual.durationSeconds = run.durationSeconds;
+    if (!s.startedAt) s.startedAt = new Date(run.startedAt).toISOString();
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    // Do not beep on an old completed timer after reopening the PWA long afterward.
+    const recent = Date.now() - run.endsAt < 5000;
+    if (recent) {
+        try { if (navigator.vibrate) navigator.vibrate([160, 90, 160]); } catch (_) {}
+    }
+    const ix = it.sets.indexOf(set);
+    const laterSetsRemain = it.sets.some((x,j) => j > ix && !x.completed);
+    const restSeconds = Number(it.restSeconds == null ? 90 : it.restSeconds);
+    // An expired hold from a backgrounded app should not restart a full rest.
+    const remainingRestSeconds = Math.ceil((run.endsAt + restSeconds * 1000 - Date.now()) / 1000);
+    if (laterSetsRemain && s.date === localDate() && restSeconds > 0 && remainingRestSeconds > 0) {
+        workoutRestTimer.start({
+            exerciseId: it.id, exerciseName: it.name, setNumber: ix + 1,
+            seconds: Math.min(restSeconds, remainingRestSeconds)
+        });
+    } else if (recent && tab === 'today') {
+        message('시간 유지 운동 완료! 다음 운동을 진행해 줘');
+    }
+}
+function tickTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
+        stopHoldTicker();
+        hideHoldTimerUi();
+        return;
+    }
+    const run = s.activeHold;
+    const remaining = run.endsAt - Date.now();
+    if (remaining <= 0) { finishTimedHold(); return; }
+    const durationMs = run.durationSeconds * 1000;
+    const elapsed = Math.max(0, durationMs - remaining);
+    const progress = Math.max(0, Math.min(100, elapsed / durationMs * 100));
+    const clock = document.getElementById('holdClock');
+    if (clock) clock.style.setProperty('--hold-progress', progress + '%');
+    const label = formatHoldCountdown(remaining);
+    document.getElementById('holdTime').textContent = label;
+    document.getElementById('holdChipTime').textContent = label;
+}
+function resumeTimedHold() {
+    const s = activeSession();
+    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
+        stopHoldTicker(); hideHoldTimerUi(); return;
+    }
+    if (timedHoldInterval === null) timedHoldInterval = setInterval(tickTimedHold, 250);
+    tickTimedHold();
+}
+function startTimedHold(s, it, set) {
+    if (s.activeHold) { showHoldTimerModal(); return; }
+    const value = Number(set.actual && set.actual.durationSeconds);
+    const fallback = Number(set.target && set.target.durationSeconds);
+    const seconds = Number.isFinite(value) && value > 0 ? value : fallback;
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86400)
+        return message('이 세트의 시간(초)을 먼저 1초~24시간으로 설정해 줘');
+    workoutRestTimer.cancel();
+    if (s.warmupStatus === 'running') stopWarmup(false);
+    const startedAt = Date.now();
+    if (!s.startedAt) s.startedAt = new Date(startedAt).toISOString();
+    s.activeHold = { itemId: it.id, setId: set.id, startedAt, endsAt: startedAt + seconds * 1000, durationSeconds: seconds };
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    showHoldTimerModal();
+    resumeTimedHold();
+}
+holdOverlay.addEventListener('click', e => {
+    const control = e.target.closest('[data-hold-action]');
+    if (!control) return;
+    if (control.dataset.holdAction === 'cancel') cancelTimedHold();
+    if (control.dataset.holdAction === 'minimize') showHoldTimerChip();
+});
+holdChip.addEventListener('click', showHoldTimerModal);
+document.addEventListener('visibilitychange', tickTimedHold);
+window.addEventListener('pageshow', tickTimedHold);
+function renderWarmupPanel(s) {
+    if (s.status === 'completed') return '';
+    const mins = Number(s.warmupMinutes) || 5;
+    if (s.warmupStatus === 'running')
+        return `<section class="card warmup-card"><div class="row between"><h2>워밍업 진행 중</h2><span class="badge">운동 시작 ${historyTimeLabel(s.startedAt)}</span></div><p class="warmup-remaining" id="warmupTime">00:00</p><div class="buttons"><button class="btn tiny outline" data-action="warmup-minus">−5분</button><button class="btn tiny outline" data-action="warmup-plus">+5분</button><button class="btn tiny" data-action="warmup-finish">워밍업 종료 · 본운동 시작</button></div><p class="subtext">워밍업을 시작한 시각부터 운동시간을 계산해. 앱을 잠시 닫아도 남은 시간은 유지돼.</p></section>`;
+    if (s.warmupStatus === 'done' || s.startedAt)
+        return `<section class="card warmup-card"><div class="row between"><h2>워밍업</h2><span class="badge">운동 시작 ${historyTimeLabel(s.startedAt) || '미기록'}</span></div><p class="subtext">운동 시작시간이 기록됐어. 다시 워밍업하더라도 최초 시작시간은 변경되지 않아.</p><button class="btn outline tiny" data-action="warmup-start">워밍업 다시 시작 (5분)</button></section>`;
+    return `<section class="card warmup-card"><h2>워밍업 · 운동 시작</h2><p class="subtext">워밍업 시작 버튼을 누르는 순간 운동 시작시간이 기록돼.</p><div class="row warmup-select"><button type="button" class="btn outline" data-action="warmup-minus" ${mins <= 5 ? 'disabled' : ''}>−5분</button><strong class="warmup-minutes">${mins}분</strong><button type="button" class="btn outline" data-action="warmup-plus" ${mins >= 120 ? 'disabled' : ''}>+5분</button></div><button type="button" class="btn main block" data-action="warmup-start">워밍업 시작</button></section>`;
+}
+let warmupTicker = null, warmupAudioCtx = null;
+function playWarmupDone() {
+    try {
+        if (warmupAudioCtx && warmupAudioCtx.state === 'running' && !document.hidden) {
+            const tone = warmupAudioCtx.createOscillator(), gain = warmupAudioCtx.createGain();
+            tone.frequency.value = 880;
+            gain.gain.setValueAtTime(.0001, warmupAudioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(.1, warmupAudioCtx.currentTime + .02);
+            gain.gain.exponentialRampToValueAtTime(.0001, warmupAudioCtx.currentTime + .45);
+            tone.connect(gain).connect(warmupAudioCtx.destination);
+            tone.start(); tone.stop(warmupAudioCtx.currentTime + .46);
+        }
+        if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+    } catch (_) { /* browser audio and vibration may be unavailable */ }
+}
+function warmupDisplay(ms) {
+    const n = Math.max(0, Math.ceil(ms / 1000));
+    return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+}
+function stopWarmup(notify) {
+    const s = activeSession();
+    if (!s || s.warmupStatus !== 'running') return;
+    s.warmupStatus = 'done';
+    s.warmupEndsAt = null;
+    if (warmupTicker) { clearInterval(warmupTicker); warmupTicker = null; }
+    dirtySession(s);
+    if (tab === 'today') renderAll();
+    if (notify) { playWarmupDone(); message('워밍업 완료! 본운동을 시작해 줘'); }
+}
+function refreshWarmupTimer() {
+    const s = activeSession();
+    if (!s || s.warmupStatus !== 'running' || !s.warmupEndsAt) {
+        if (warmupTicker) { clearInterval(warmupTicker); warmupTicker = null; }
+        return;
+    }
+    const remaining = s.warmupEndsAt - Date.now();
+    if (remaining <= 0) { stopWarmup(true); return; }
+    const display = el('warmupTime');
+    if (display) display.textContent = warmupDisplay(remaining);
+    if (!warmupTicker) warmupTicker = setInterval(refreshWarmupTimer, 500);
+}
+function startWarmup() {
+    const s = ensureTodaySession();
+    if (s.status === 'completed' || s.warmupStatus === 'running') return;
+    workoutRestTimer.cancel();
+    if (!s.startedAt) s.startedAt = isoNow();
+    const mins = s.warmupStatus === 'done' ? 5 : Math.max(5, Math.min(120, Number(s.warmupMinutes) || 5));
+    s.warmupMinutes = mins;
+    s.warmupStatus = 'running';
+    s.warmupEndsAt = Date.now() + mins * 60000;
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+            if (!warmupAudioCtx) warmupAudioCtx = new Ctx();
+            warmupAudioCtx.resume().catch(() => {});
+        }
+    } catch (_) {}
+    dirtySession(s); renderAll(); refreshWarmupTimer();
+}
+function adjustWarmup(delta) {
+    const s = activeSession();
+    if (!s || s.status === 'completed') return;
+    if (s.warmupStatus === 'running') {
+        s.warmupEndsAt += delta * 60000;
+        s.warmupMinutes = Math.min(120, Math.max(5, Number(s.warmupMinutes || 5) + delta));
+        if (delta > 0) s.warmupEndsAt = Math.min(s.warmupEndsAt, Date.now() + 120 * 60000);
+        dirtySession(s); refreshWarmupTimer();
+        return;
+    }
+    s.warmupMinutes = Math.max(5, Math.min(120, (Number(s.warmupMinutes) || 5) + delta));
+    dirtySession(s); renderAll();
+}
 function renderToday() {
     const s = activeSession();
     if (!s || !state.sessions.includes(s))
         return `<section class="card highlight"><h2>나만의 운동 기록을 시작해 봐</h2><p class="muted-block">운동을 직접 만들거나 저장한 루틴을 불러와서 시작해 봐.</p><div class="buttons"><button class="btn main" data-action="go-library">운동 만들기</button><button class="btn outline" data-action="go-routines">루틴 불러오기</button></div></section>`;
     const { done, total } = progress(s);
     const p = total ? Math.round(done / total * 100) : 0, locked = s.status === 'completed';
-    return `<section class="card highlight"><div class="progress-top"><strong>${escapeHtml(sessionName(s))}</strong><span>${done} / ${total} 세트</span></div><div class="progress"><div class="bar" style="width:${p}%"></div></div><div class="toolbar"><span class="badge">${locked ? '완료된 기록' : '진행 중'}</span><span class="subtext">${locked ? '오늘 운동 기록이 잠겼어' : '오늘의 운동은 자동 저장돼'}</span></div>${s.startedAt && s.items.length ? `<p class="subtext" style="margin:10px 0 0">${escapeHtml(historyTimeRange(s))}</p>` : ''}</section>
+    return `${renderWarmupPanel(s)}<section class="card highlight"><div class="progress-top"><strong>${escapeHtml(sessionName(s))}</strong><span>${done} / ${total} 세트</span></div><div class="progress"><div class="bar" style="width:${p}%"></div></div><div class="toolbar"><span class="badge">${locked ? '완료된 기록' : '진행 중'}</span><span class="subtext">${locked ? '오늘 운동 기록이 잠겼어' : '오늘의 운동은 자동 저장돼'}</span></div>${s.startedAt && s.items.length ? `<p class="subtext" style="margin:10px 0 0">${escapeHtml(historyTimeRange(s))}</p>` : ''}</section>
 <fieldset class="workout-controls ${locked ? 'is-locked' : ''}" ${locked ? 'disabled aria-label="완료되어 수정할 수 없는 운동 기록"' : ''}>
 ${s.items.length ? s.items.map((it, n) => renderSessionItem(it, n, s)).join('') : `<div class="empty"><strong>아직 운동이 없어</strong>운동 목록에서 종목을 만들어 추가하거나 저장한 루틴을 불러와 봐.</div>`}
 <div class="card"><h2>운동 추가</h2><label class="sr-only" for="todayAddExercise">운동 종목 선택</label><select class="select" id="todayAddExercise"><option value="">운동 목록에서 선택</option>${listOptions()}</select><div class="buttons" style="margin-top:10px"><button class="btn tiny outline" data-action="open-exercise">+ 새 종목 만들기</button><button class="btn tiny" data-action="go-routines">루틴 불러오기</button></div></div>
@@ -860,10 +1103,10 @@ function renderSetRow(it, se, i) {
         const target = part ? durationPart(t.durationSeconds, part) : toDisplay(key, t[key], kind);
         return `<div>${fixedUnitInput({ key, unit, value: actual, aria: `${it.name} ${i + 1}세트 ${unit}`, attrs: `step="${step}" ${part === 'sec' ? 'max="59"' : ''}`, part })}<div class="target">목표: ${escapeHtml(target === '' ? '—' : target)}${unit}</div></div>`;
     }).join('');
-    return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : '완료'}" data-item-action="toggle-set">${se.completed ? '✓' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
+    return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : hold ? '시간 유지 운동 시작' : '완료'}" title="${hold && !se.completed ? '운동 타이머 시작' : ''}" data-item-action="toggle-set">${se.completed ? '✓' : hold ? '▶' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
 }
-function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">운동 종목과 목표 세트를 자유롭게 등록하고 편집할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
-function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · ${((_a = e.defaultSets) === null || _a === void 0 ? void 0 : _a.length) || 0}세트${e.type === 'cardio' ? '' : ` · 휴식 ${(_b = e.restSeconds) !== null && _b !== void 0 ? _b : 90}초`}</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
+function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">여기에는 운동 종목만 등록해. 목표 중량·횟수·세트는 루틴에서 설정할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
+function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · 루틴에서 세트별 목표 설정</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
 function countRoutineDuplicateNames(r) {
     const seen = new Map();
     let count = 0;
@@ -974,49 +1217,108 @@ function ensureTodaySession() {
 }
 function addToToday(id) { const ex = exerciseById(id); if (!ex)
     return message('운동을 찾지 못했어'); const s = ensureTodaySession(); if (s.status === 'completed')
-    return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); if (!s.startedAt)
-    s.startedAt = isoNow(); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
+    return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
 function move(arr, i, dir) { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length)
     return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; }
-function renderTemplateSets() {
-    const type = el('exerciseType').value, mode = el('bodyweightMode').value;
-    const cardio = type === 'cardio';
-    el('exerciseRestRow').style.display = cardio ? 'none' : '';
-    el('exerciseForm').elements.restSeconds.disabled = cardio;
-    el('bodyweightModeRow').hidden = type !== 'bodyweight';
-    const isHold = type === 'bodyweight' && mode === 'duration';
-    const fields = type === 'weight' ? [['weightKg', 'kg', '중량', .5], ['reps', '개', '횟수', 1]] :
-        isHold ? [['durationSeconds', '분', '유지 시간(분)', 1, 'min'], ['durationSeconds', '초', '유지 시간(초)', 1, 'sec']] :
-            type === 'bodyweight' ? [['reps', '개', '횟수', 1]] :
-                [['durationSeconds', '분', '운동시간', .5], ['distanceMeters', 'km', '이동거리', .1], ['heartRate', 'bpm', '평균심박', 1]];
-    el('templateSets').innerHTML = templateDraft.map((s, i) => {
-        const fs = fields.map(([k, unit, label, step, part]) => {
-            const v = part ? durationPart(s.durationSeconds, part) : toDisplay(k, s[k], type);
-            return fixedUnitInput({ key: k, unit, value: v, aria: `${i + 1}세트 ${label}`, attrs: `step="${step}" ${part === 'sec' ? 'max="59"' : ''}`, draft: true, part });
-        }).join('');
-        return `<div class="template-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''}" data-draft-index="${i}"><span class="small-label">${i + 1}</span>${fs}<button class="btn tiny danger" type="button" data-remove-template="${i}" aria-label="${i + 1}세트 삭제" title="세트 삭제">×</button></div>`;
-    }).join('') || '<p class="subtext">세트가 없어. 추가 버튼으로 넣어 줘.</p>';
+function refreshExerciseMode() {
+    el('bodyweightModeRow').hidden = el('exerciseType').value !== 'bodyweight';
 }
-function openExerciseDialog(id = null) { var _a; editExerciseId = id; const ex = exerciseById(id); const f = el('exerciseForm'); f.reset(); f.elements.name.value = (ex === null || ex === void 0 ? void 0 : ex.name) || ''; f.elements.type.value = (ex === null || ex === void 0 ? void 0 : ex.type) || 'weight'; f.elements.restSeconds.value = (_a = ex === null || ex === void 0 ? void 0 : ex.restSeconds) !== null && _a !== void 0 ? _a : 90; f.elements.caution.value = (ex === null || ex === void 0 ? void 0 : ex.caution) || ''; f.elements.tags.value = ((ex === null || ex === void 0 ? void 0 : ex.tags) || []).join(', '); f.elements.bodyweightMode.value = (ex === null || ex === void 0 ? void 0 : ex.bodyweightMode) || 'reps'; templateDraft = ex ? clone(ex.defaultSets) : [metricDefaults({ type: 'weight' })]; el('exerciseFormTitle').textContent = ex ? '운동 수정' : '운동 추가'; renderTemplateSets(); el('exerciseDialog').showModal(); }
-function saveExerciseForm() { const f = el('exerciseForm'); const name = f.elements.name.value.trim(); if (!name) {
-    message('운동명을 입력해 줘');
-    return;
-} const type = f.elements.type.value, mode = f.elements.bodyweightMode.value; const rest = type === 'cardio' ? 0 : Math.round(Math.min(1800, Math.max(0, Number(f.elements.restSeconds.value) || 0))); const ex = editExerciseId ? exerciseById(editExerciseId) : null; const sets = templateDraft.map(s => { const keys = type === 'weight' ? ['weightKg', 'reps'] : type === 'bodyweight' ? [mode === 'duration' ? 'durationSeconds' : 'reps'] : ['durationSeconds', 'distanceMeters', 'heartRate']; return Object.fromEntries(keys.map(k => [k, numeric(s[k])])); }); const rec = { id: (ex === null || ex === void 0 ? void 0 : ex.id) || uuid(), name, type, caution: f.elements.caution.value.trim(), tags: f.elements.tags.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 20), bodyweightMode: mode, restSeconds: rest, defaultSets: sets, createdAt: (ex === null || ex === void 0 ? void 0 : ex.createdAt) || isoNow(), updatedAt: isoNow() }; if (ex)
-    state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = rec;
-else
-    state.exerciseLibrary.push(rec); modified(); el('exerciseDialog').close(); renderAll(); message(ex ? '운동을 수정했어' : '새 운동을 만들었어'); }
-function renderRoutineDraft() { el('routineItems').innerHTML = routineDraft.length ? routineDraft.map((id, i) => { var _a; return `<div class="chip"><span>${i + 1}. ${escapeHtml(((_a = exerciseById(id)) === null || _a === void 0 ? void 0 : _a.name) || '삭제된 운동')}</span><div class="buttons"><button type="button" class="btn tiny" data-routine-move="up" data-routine-index="${i}">↑</button><button type="button" class="btn tiny" data-routine-move="down" data-routine-index="${i}">↓</button><button type="button" class="btn tiny danger" data-routine-remove="${i}">×</button></div></div>`; }).join('') : '<p class="subtext">등록된 종목이 없어. 위에서 선택해 추가해 줘.</p>'; }
-function openRoutineDialog(id = null) { editRoutineId = id; const r = state.routines.find(x => x.id === id), f = el('routineForm'); f.elements.name.value = (r === null || r === void 0 ? void 0 : r.name) || ''; routineDraft = clone((r === null || r === void 0 ? void 0 : r.exerciseIds) || []); el('routineExerciseSelect').innerHTML = '<option value="">종목을 선택해 추가</option>' + listOptions(); el('routineFormTitle').textContent = r ? '루틴 편집' : '새 루틴'; renderRoutineDraft(); el('routineDialog').showModal(); }
-function saveRoutine() { const f = el('routineForm'), name = f.elements.name.value.trim(); if (!name) {
-    message('루틴 이름을 입력해 줘');
-    return;
-} const prev = state.routines.find(r => r.id === editRoutineId); const ids = routineDraft.filter(id => exerciseById(id));
-    // Preserve text-imported, routine-specific set targets when editing name/order/items.
-    const setPlans = prev && prev.setPlans ? Object.fromEntries(ids.filter(id => Array.isArray(prev.setPlans[id])).map(id => [id, clone(prev.setPlans[id])])) : null;
-    const r = { id: (prev === null || prev === void 0 ? void 0 : prev.id) || uuid(), name, exerciseIds: ids, ...(setPlans && Object.keys(setPlans).length ? { setPlans } : {}), createdAt: (prev === null || prev === void 0 ? void 0 : prev.createdAt) || isoNow(), updatedAt: isoNow() }; if (prev)
-    state.routines[withId(state.routines, r.id)] = r;
-else
-    state.routines.push(r); modified(); el('routineDialog').close(); renderAll(); message('루틴을 저장했어'); }
+function openExerciseDialog(id = null) {
+    editExerciseId = id;
+    const ex = exerciseById(id), f = el('exerciseForm');
+    f.reset();
+    f.elements.name.value = ex ? ex.name : '';
+    f.elements.type.value = ex ? ex.type : 'weight';
+    f.elements.caution.value = ex ? (ex.caution || '') : '';
+    f.elements.tags.value = ex ? (ex.tags || []).join(', ') : '';
+    f.elements.bodyweightMode.value = ex ? (ex.bodyweightMode || 'reps') : 'reps';
+    el('exerciseFormTitle').textContent = ex ? '종목 수정' : '종목 추가';
+    refreshExerciseMode();
+    el('exerciseDialog').showModal();
+}
+function saveExerciseForm() {
+    const f = el('exerciseForm'), name = f.elements.name.value.trim();
+    if (!name) return message('운동명을 입력해 줘');
+    const ex = editExerciseId ? exerciseById(editExerciseId) : null;
+    const type = f.elements.type.value;
+    const record = {
+        id: ex ? ex.id : uuid(), name, type,
+        caution: f.elements.caution.value.trim(),
+        tags: f.elements.tags.value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 20),
+        bodyweightMode: type === 'bodyweight' ? f.elements.bodyweightMode.value : 'reps',
+        // Preserve old catalog presets for older routines, but do not assign new exercise plans.
+        defaultSets: ex ? clone(ex.defaultSets || []) : [],
+        restSeconds: ex ? (ex.restSeconds == null ? 90 : ex.restSeconds) : (type === 'cardio' ? 0 : 90),
+        createdAt: ex ? ex.createdAt : isoNow(), updatedAt: isoNow()
+    };
+    if (ex) state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = record;
+    else state.exerciseLibrary.push(record);
+    modified(); el('exerciseDialog').close(); renderAll();
+    message(ex ? '종목을 수정했어' : '새 종목을 만들었어');
+}
+let routinePlanDraft = {};
+function routineSetFields(ex) {
+    if (ex.type === 'weight') return [['weightKg', 'kg', .5, null], ['reps', '회', 1, null]];
+    if (ex.type === 'bodyweight')
+        return ex.bodyweightMode === 'duration' ?
+            [['durationSeconds', '분', 1, 'min'], ['durationSeconds', '초', 1, 'sec']] :
+            [['reps', '회', 1, null]];
+    return [['durationSeconds', '분', .5, null], ['distanceMeters', 'km', .1, null], ['heartRate', 'bpm', 1, null]];
+}
+function renderRoutineDraft() {
+    el('routineItems').innerHTML = routineDraft.length ? routineDraft.map((id, i) => {
+        const ex = exerciseById(id);
+        if (!ex) return '';
+        const sets = routinePlanDraft[id] || [metricDefaults(ex)];
+        const rows = sets.map((metric, j) => {
+            const fields = routineSetFields(ex);
+            const inputs = fields.map(([key, unit, step, part]) => {
+                const val = part ? durationPart(metric.durationSeconds, part) : toDisplay(key, metric[key], ex.type);
+                return `<label class="template-metric"><input class="input" type="number" inputmode="decimal" min="0" ${part === 'sec' ? 'max="59"' : ''} step="${step}" data-routine-field="${key}" ${part ? `data-duration-part="${part}"` : ''} aria-label="${escapeHtml(ex.name)} ${j + 1}세트 ${unit}" value="${escapeHtml(val)}"><span class="unit">${unit}</span></label>`;
+            }).join('');
+            return `<div class="template-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''}" data-routine-set-index="${j}"><span class="small-label">${j + 1}</span>${inputs}<button class="btn tiny danger" type="button" data-routine-remove-set="${j}" title="세트 삭제" aria-label="${j + 1}세트 삭제">×</button></div>`;
+        }).join('');
+        return `<div class="card routine-plan" data-routine-exercise-id="${escapeHtml(id)}"><div class="row between"><strong>${i + 1}. ${escapeHtml(ex.name)}</strong><div class="buttons"><button type="button" class="btn tiny" data-routine-move="up" data-routine-index="${i}">↑</button><button type="button" class="btn tiny" data-routine-move="down" data-routine-index="${i}">↓</button><button type="button" class="btn tiny danger" data-routine-remove="${i}">×</button></div></div><p class="subtext">${typeLabel[ex.type]} · ${sets.length}세트</p>${rows}<button type="button" class="btn tiny outline" data-routine-add-set="+">+ 세트 추가</button></div>`;
+    }).join('') : '<p class="subtext">운동 종목을 선택하면 여기에서 무게·횟수·세트를 설정할 수 있어.</p>';
+}
+function openRoutineDialog(id = null) {
+    editRoutineId = id;
+    const r = state.routines.find(x => x.id === id), f = el('routineForm');
+    f.elements.name.value = r ? r.name : '';
+    routineDraft = clone(r ? r.exerciseIds : []);
+    routinePlanDraft = {};
+    for (const exerciseId of routineDraft) {
+        const ex = exerciseById(exerciseId);
+        if (!ex || routinePlanDraft[exerciseId]) continue;
+        const planned = r && r.setPlans && r.setPlans[exerciseId];
+        const legacy = ex.defaultSets;
+        routinePlanDraft[exerciseId] = clone(Array.isArray(planned) && planned.length ? planned :
+            Array.isArray(legacy) && legacy.length ? legacy : [metricDefaults(ex)]);
+    }
+    el('routineExerciseSelect').innerHTML = '<option value="">종목을 선택해 추가</option>' + listOptions();
+    el('routineFormTitle').textContent = r ? '루틴 편집 · 세트별 목표' : '새 루틴 · 세트별 목표';
+    renderRoutineDraft(); el('routineDialog').showModal();
+}
+function saveRoutine() {
+    const f = el('routineForm'), name = f.elements.name.value.trim();
+    if (!name) return message('루틴 이름을 입력해 줘');
+    const prev = state.routines.find(r => r.id === editRoutineId);
+    const ids = routineDraft.filter(id => exerciseById(id));
+    if (!ids.length) return message('운동 종목을 하나 이상 추가해 줘');
+    const setPlans = {};
+    for (const id of ids) {
+        const ex = exerciseById(id), source = routinePlanDraft[id];
+        if (!Array.isArray(source) || !source.length) return message(`${ex.name}의 세트를 하나 이상 만들어 줘`);
+        if (source.length > 200) return message('한 운동은 최대 200세트까지 등록할 수 있어');
+        setPlans[id] = clone(source);
+    }
+    const rec = { id: prev ? prev.id : uuid(), name, exerciseIds: ids, setPlans,
+        createdAt: prev ? prev.createdAt : isoNow(), updatedAt: isoNow() };
+    if (prev) state.routines[withId(state.routines, rec.id)] = rec;
+    else state.routines.push(rec);
+    modified(); el('routineDialog').close(); renderAll();
+    message('세트별 목표를 포함해 루틴을 저장했어');
+}
 // Text routine import uses the same exerciseLibrary + routines schema as the manual editor.
 // It never overwrites existing exercises or previous workout records.
 function parseTextRoutineRow(line, lineNo) {
@@ -1147,7 +1449,7 @@ function saveTextRoutine(event) {
             const now = isoNow();
             ex = { id: uuid(), name: group.name, type: group.type, caution: '', tags: [],
                 bodyweightMode: group.bodyweightMode, restSeconds: group.type === 'cardio' ? 0 : 90,
-                defaultSets: clone(group.defaultSets), createdAt: now, updatedAt: now };
+                defaultSets: [], createdAt: now, updatedAt: now };
             toAdd.push(ex);
         }
         ids.push(ex.id);
@@ -1172,7 +1474,6 @@ function startRoutine(id) {
     if (!r.exerciseIds.length) return message('루틴에 운동이 없어');
     const s = ensureTodaySession();
     if (s.status === 'completed') return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘');
-    if (!s.startedAt) s.startedAt = isoNow();
     const items = r.exerciseIds.map(exerciseById).filter(Boolean).map(ex => {
         const item = newItem(ex);
         const planned = r.setPlans && r.setPlans[ex.id];
@@ -1325,7 +1626,7 @@ catch (e) {
     message('가져오기 실패: ' + e.message);
     return;
 } if (!confirm(`이 기기의 기록 ${state.sessions.length}개 세션, 운동 ${state.exerciseLibrary.length}개를 가져온 파일의 데이터로 모두 바꿀까?\n\n이 작업은 되돌릴 수 없어. 기존 자료를 먼저 백업해 줘.`))
-    return; workoutRestTimer.cancel(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); message('백업 파일을 복원했어'); }
+    return; workoutRestTimer.cancel(); stopHoldTicker(); hideHoldTimerUi(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); resumeTimedHold(); message('백업 파일을 복원했어'); }
 function install() { if (!installedPrompt) {
     message('HTTPS 배포 후 브라우저 메뉴에서 홈 화면에 추가해 줘');
     return;
@@ -1357,6 +1658,18 @@ main.addEventListener('click', e => {
     if (action) {
         const id = b.dataset.id;
         switch (action) {
+            case 'warmup-start':
+                startWarmup();
+                break;
+            case 'warmup-minus':
+                adjustWarmup(-5);
+                break;
+            case 'warmup-plus':
+                adjustWarmup(5);
+                break;
+            case 'warmup-finish':
+                stopWarmup(false);
+                break;
             case 'go-library':
                 setTab('library');
                 break;
@@ -1470,6 +1783,10 @@ main.addEventListener('click', e => {
     const it = s.items.find(x => x.id === card.dataset.itemId);
     if (!it)
         return;
+    if (s.activeHold && (b.dataset.setAction || b.dataset.itemAction || b.dataset.itemMove)) {
+        if (b.dataset.itemAction !== 'toggle-set') message('시간 유지 운동이 진행 중이야. 완료하거나 취소한 뒤 수정해 줘');
+        if (b.dataset.itemAction !== 'toggle-set') return;
+    }
     const setAct = b.dataset.setAction;
     if (setAct) {
         const se = it.sets.find(x => { var _a; return x.id === ((_a = b.closest('[data-set-id]')) === null || _a === void 0 ? void 0 : _a.dataset.setId); });
@@ -1515,9 +1832,19 @@ main.addEventListener('click', e => {
                 const row = b.closest('[data-set-id]'), se = it.sets.find(x => x.id === (row === null || row === void 0 ? void 0 : row.dataset.setId));
                 if (!se)
                     return;
+                if (s.activeHold) {
+                    if (s.activeHold.setId === se.id) showHoldTimerModal();
+                    else message('다른 시간 유지 세트가 진행 중이야. 먼저 완료하거나 취소해 줘');
+                    return;
+                }
+                if (!se.completed && it.type === 'bodyweight' && (it.bodyweightMode || 'reps') === 'duration') {
+                    startTimedHold(s, it, se);
+                    return;
+                }
                 se.completed = !se.completed;
                 if (se.completed && !s.startedAt)
                     s.startedAt = isoNow();
+                if (se.completed && s.warmupStatus === 'running') stopWarmup(false);
                 const ix = it.sets.indexOf(se);
                 if (se.completed && s.date === localDate() && it.type !== 'cardio') {
                     // Only start when an unfinished LATER set exists for this exercise.
@@ -1629,39 +1956,54 @@ main.addEventListener('input', e => {
         dirtySession(s);
     }
 });
-el('exerciseType').addEventListener('change', () => { templateDraft = [metricDefaults({ type: el('exerciseType').value, bodyweightMode: el('bodyweightMode').value })]; renderTemplateSets(); });
-el('bodyweightMode').addEventListener('change', () => { templateDraft = templateDraft.map(() => metricDefaults({ type: 'bodyweight', bodyweightMode: el('bodyweightMode').value })); renderTemplateSets(); });
-el('templateSets').addEventListener('input', e => {
-    var _a, _b, _c;
-    const key = e.target.dataset.draftField;
-    if (!key)
-        return;
-    const ix = Number((_a = e.target.closest('[data-draft-index]')) === null || _a === void 0 ? void 0 : _a.dataset.draftIndex);
-    if (templateDraft[ix]) {
-        if (key === 'durationSeconds' && e.target.dataset.durationPart) {
-            const row = e.target.closest('[data-draft-index]');
-            const min = (_b = row.querySelector('[data-duration-part="min"]')) === null || _b === void 0 ? void 0 : _b.value;
-            const sec = (_c = row.querySelector('[data-duration-part="sec"]')) === null || _c === void 0 ? void 0 : _c.value;
-            templateDraft[ix].durationSeconds = secondsFromParts(min, sec);
+el('exerciseType').addEventListener('change', refreshExerciseMode);
+el('exerciseForm').addEventListener('submit', e => { e.preventDefault(); saveExerciseForm(); });
+el('routineExerciseSelect').addEventListener('change', e => {
+    const id = e.target.value;
+    if (id) {
+        if (routineDraft.includes(id)) message('이미 추가한 종목이야. 여러 중량은 세트로 설정해 줘');
+        else {
+            routineDraft.push(id);
+            routinePlanDraft[id] = [metricDefaults(exerciseById(id))];
+            renderRoutineDraft();
         }
-        else
-            templateDraft[ix][key] = fromDisplay(key, e.target.value, el('exerciseType').value);
+        e.target.value = '';
     }
 });
-el('templateSets').addEventListener('click', e => { const b = e.target.closest('[data-remove-template]'); if (!b)
-    return; templateDraft.splice(Number(b.dataset.removeTemplate), 1); renderTemplateSets(); });
-el('addTemplateSet').addEventListener('click', () => { const t = el('exerciseType').value, m = el('bodyweightMode').value; templateDraft.push(clone(templateDraft[templateDraft.length - 1] || metricDefaults({ type: t, bodyweightMode: m }))); renderTemplateSets(); });
-el('exerciseForm').addEventListener('submit', e => { e.preventDefault(); saveExerciseForm(); });
-el('routineExerciseSelect').addEventListener('change', e => { if (e.target.value) {
-    routineDraft.push(e.target.value);
+el('routineItems').addEventListener('input', e => {
+    const target = e.target, key = target.dataset.routineField;
+    if (!key) return;
+    const card = target.closest('[data-routine-exercise-id]'), row = target.closest('[data-routine-set-index]');
+    if (!card || !row) return;
+    const id = card.dataset.routineExerciseId, ix = Number(row.dataset.routineSetIndex);
+    const ex = exerciseById(id), set = routinePlanDraft[id] && routinePlanDraft[id][ix];
+    if (!ex || !set) return;
+    if (key === 'durationSeconds' && target.dataset.durationPart) {
+        const min = row.querySelector('[data-duration-part="min"]');
+        const sec = row.querySelector('[data-duration-part="sec"]');
+        set.durationSeconds = secondsFromParts(min && min.value, sec && sec.value);
+    } else set[key] = fromDisplay(key, target.value, ex.type);
+});
+el('routineItems').addEventListener('click', e => {
+    const b = e.target.closest('[data-routine-remove],[data-routine-move],[data-routine-add-set],[data-routine-remove-set]');
+    if (!b) return;
+    const card = b.closest('[data-routine-exercise-id]');
+    const id = card && card.dataset.routineExerciseId, sets = id && routinePlanDraft[id];
+    if (b.dataset.routineRemove !== undefined) {
+        const ix = Number(b.dataset.routineRemove);
+        const removed = routineDraft.splice(ix, 1)[0];
+        if (!routineDraft.includes(removed)) delete routinePlanDraft[removed];
+    } else if (b.dataset.routineMove !== undefined) {
+        move(routineDraft, Number(b.dataset.routineIndex), b.dataset.routineMove === 'up' ? -1 : 1);
+    } else if (b.dataset.routineAddSet !== undefined && sets) {
+        if (sets.length >= 200) return message('한 운동은 최대 200세트까지 추가할 수 있어');
+        sets.push(clone(sets[sets.length - 1] || metricDefaults(exerciseById(id))));
+    } else if (b.dataset.routineRemoveSet !== undefined && sets) {
+        if (sets.length <= 1) return message('세트는 최소 1개 필요해');
+        sets.splice(Number(b.dataset.routineRemoveSet), 1);
+    }
     renderRoutineDraft();
-    e.target.value = '';
-} });
-el('routineItems').addEventListener('click', e => { const b = e.target.closest('[data-routine-remove],[data-routine-move]'); if (!b)
-    return; if (b.dataset.routineRemove !== undefined)
-    routineDraft.splice(Number(b.dataset.routineRemove), 1);
-else
-    move(routineDraft, Number(b.dataset.routineIndex), b.dataset.routineMove === 'up' ? -1 : 1); renderRoutineDraft(); });
+});
 el('routineForm').addEventListener('submit', e => { e.preventDefault(); saveRoutine(); });
 el('textRoutineForm').addEventListener('submit', saveTextRoutine);
 el('textRoutineInput').addEventListener('input', updateTextRoutinePreview);
@@ -1675,6 +2017,9 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 if ('serviceWorker' in navigator && ['https:', 'http:'].includes(location.protocol) && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname)))
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('PWA:', e)));
 initStorage().then(() => {
+    refreshWarmupTimer();
+    resumeTimedHold();
+    if (activeSession() && activeSession().activeHold) showHoldTimerModal();
     const notice = el('startupAlert');
     if (notice && !window.__workoutRuntimeError)
         notice.hidden = true;
