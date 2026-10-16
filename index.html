@@ -245,7 +245,7 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 </head>
 <body>
 <div class="shell">
-<header class="top"><div><div class="eyebrow">YOUR WORKOUT · v3.2</div><h1 id="pageTitle">오늘 운동</h1><p class="seo-tagline">운동 기록 · 루틴 관리 · 자동 휴식 타이머</p></div><div class="today-date" id="dateLabel"></div></header>
+<header class="top"><div><div class="eyebrow">YOUR WORKOUT · v3.4.1</div><h1 id="pageTitle">오늘 운동</h1><p class="seo-tagline">운동 기록 · 루틴 관리 · 자동 휴식 타이머</p></div><div class="today-date" id="dateLabel"></div></header>
 <section id="startupAlert" data-nosnippet class="startup-alert" role="alert"><strong>앱 실행을 확인할 수 없어.</strong>화면은 보이는데 버튼이 작동하지 않는다면, HTML 미리보기 앱이 JavaScript 실행을 막고 있을 수 있어. 이 파일을 Chrome·Safari 같은 정식 브라우저에서 열거나 HTTPS 웹주소로 접속해 줘.<div id="startupErrorDetail"></div></section>
 <main id="main" aria-live="off"><p class="muted" data-nosnippet>저장된 운동 기록을 불러오는 중...</p></main>
 </div>
@@ -317,15 +317,15 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
   <div class="dialog-foot"><button type="button" class="btn" data-close-dialog="backupDialog">취소</button></div>
 </dialog>
 <div class="rest-overlay" id="restOverlay" hidden>
-<section class="rest-dialog" role="dialog" aria-modal="true" aria-labelledby="restHeading" aria-describedby="restCaption"><p class="rest-caption" id="restCaption"></p><h2 id="restHeading">휴식 시간</h2><div class="rest-clock" id="restClock"><div class="rest-clock-inner"><span class="rest-time" id="restTime" role="timer" aria-live="off">01:30</span><span class="rest-status" id="restStatus">휴식 중</span></div></div><div class="rest-buttons" id="restRunningActions"><button class="rest-action" type="button" data-rest-action="decrease">−15초</button><button class="rest-action" type="button" data-rest-action="increase">+15초</button><button class="rest-action" type="button" data-rest-action="skip">건너뛰기</button></div><button class="rest-action rest-action-primary rest-action-wide" type="button" id="restMinimizeBtn" data-rest-action="minimize">작게 보기 · 운동 화면으로</button></section>
+<section class="rest-dialog" role="dialog" aria-modal="true" aria-labelledby="restHeading" aria-describedby="restCaption"><p class="rest-caption" id="restCaption"></p><h2 id="restHeading">휴식 시간</h2><div class="rest-clock" id="restClock"><div class="rest-clock-inner"><span class="rest-time" id="restTime" role="timer" aria-live="off">01:30</span></div></div><div class="rest-buttons" id="restRunningActions"><button class="rest-action" type="button" data-rest-action="decrease">−15초</button><button class="rest-action" type="button" data-rest-action="increase">+15초</button><button class="rest-action" type="button" data-rest-action="skip">건너뛰기</button></div><button class="rest-action rest-action-primary rest-action-wide" type="button" id="restMinimizeBtn" data-rest-action="minimize">작게 보기 · 운동 화면으로</button></section>
 </div>
 <button class="rest-chip" id="restChip" hidden type="button" aria-label="진행 중인 휴식 타이머 열기">휴식 <span id="restChipTime">00:00</span></button>
 <div class="hold-overlay" id="holdOverlay" hidden>
   <section class="rest-dialog hold-dialog" role="dialog" aria-modal="true" aria-labelledby="holdHeading" aria-describedby="holdCaption">
     <p class="rest-caption" id="holdCaption">시간 유지 운동</p>
     <h2 id="holdHeading">운동 중</h2>
-    <div class="rest-clock hold-clock" id="holdClock"><div class="rest-clock-inner"><span class="rest-time hold-time" id="holdTime" role="timer" aria-live="off">00:30</span><span class="rest-status" id="holdStatus">운동 중 · 원형 게이지가 차오르면 완료</span></div></div>
-    <p class="subtext">설정한 시간이 끝나면 세트가 완료되고, 다음 세트가 남았으면 휴식 타이머로 자동 연결돼.</p>
+    <div class="rest-clock hold-clock" id="holdClock"><div class="rest-clock-inner"><span class="rest-time hold-time" id="holdTime" role="timer" aria-live="off">00:30</span></div></div>
+    <p class="subtext">다음 세트가 남았으면 휴식 타이머로 자동 연결돼</p>
     <div class="rest-buttons"><button class="rest-action hold-cancel" type="button" data-hold-action="cancel">운동 취소</button><button class="rest-action rest-action-primary" type="button" data-hold-action="minimize">작게 보기</button></div>
   </section>
 </div>
@@ -389,7 +389,6 @@ if (!Object.fromEntries) {
     const chip = document.getElementById('restChip');
     const clock = document.getElementById('restClock');
     const timeDisplay = document.getElementById('restTime');
-    const status = document.getElementById('restStatus');
     const caption = document.getElementById('restCaption');
     const chipTime = document.getElementById('restChipTime');
     const runningActions = document.getElementById('restRunningActions');
@@ -482,7 +481,6 @@ if (!Object.fromEntries) {
         const display = clockText(remaining);
         timeDisplay.textContent = display;
         chipTime.textContent = display;
-        status.textContent = '휴식 중';
         clock.style.setProperty('--rest-progress', `${Math.max(0, Math.min(100, remaining / (active.durationSeconds * 1000) * 100))}%`);
         runningActions.hidden = false;
         minimizeBtn.hidden = false;
@@ -605,6 +603,7 @@ if (!Object.fromEntries) {
     window.workoutRestTimer = {
         start,
         cancel,
+        minimize: showChip,
         cancelIfMatches(exerciseId, setNumber) {
             if (active && active.exerciseId === exerciseId && active.setNumber === setNumber)
                 cancel();
@@ -869,15 +868,27 @@ function stopHoldTicker() {
         timedHoldInterval = null;
     }
 }
+function validTimedHold(s) {
+    const run = s && s.activeHold;
+    if (!run || s.status === 'completed' || s.date !== localDate()) return false;
+    const item = s.items && s.items.find(x => x.id === run.itemId);
+    const set = item && item.sets && item.sets.find(x => x.id === run.setId);
+    return !!(item && set && !set.completed && item.type === 'bodyweight'
+        && (item.bodyweightMode || 'reps') === 'duration'
+        && Number.isFinite(run.startedAt) && Number.isFinite(run.endsAt)
+        && Number.isFinite(run.durationSeconds)
+        && run.durationSeconds > 0 && run.durationSeconds <= 86400
+        && run.endsAt === run.startedAt + run.durationSeconds * 1000);
+}
 function showHoldTimerModal() {
     const s = activeSession();
-    if (!s || !s.activeHold) return;
+    if (!validTimedHold(s)) return;
     holdOverlay.hidden = false;
     holdChip.hidden = true;
     tickTimedHold();
 }
 function showHoldTimerChip() {
-    if (!activeSession() || !activeSession().activeHold) return;
+    if (!validTimedHold(activeSession())) return;
     holdOverlay.hidden = true;
     holdChip.hidden = false;
     tickTimedHold();
@@ -892,7 +903,7 @@ function cancelTimedHold(silent = false) {
     if (tab === 'today') renderAll();
     if (!silent) message('시간 유지 운동을 취소했어. 이 세트는 미완료야');
 }
-function finishTimedHold() {
+function finishTimedHold(restoring = false) {
     const s = activeSession();
     if (!s || !s.activeHold) return;
     const run = s.activeHold;
@@ -928,15 +939,21 @@ function finishTimedHold() {
             exerciseId: it.id, exerciseName: it.name, setNumber: ix + 1,
             seconds: Math.min(restSeconds, remainingRestSeconds)
         });
+        // Reopening the app should not place a restored rest timer over the entire UI.
+        if (restoring) workoutRestTimer.minimize();
     } else if (recent && tab === 'today') {
         message('시간 유지 운동 완료! 다음 운동을 진행해 줘');
     }
 }
 function tickTimedHold() {
     const s = activeSession();
-    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
+    if (!validTimedHold(s)) {
         stopHoldTicker();
         hideHoldTimerUi();
+        if (s && s.activeHold) {
+            s.activeHold = null; // Only discard an invalid timer pointer, never workout results.
+            dirtySession(s);
+        }
         return;
     }
     const run = s.activeHold;
@@ -951,13 +968,24 @@ function tickTimedHold() {
     document.getElementById('holdTime').textContent = label;
     document.getElementById('holdChipTime').textContent = label;
 }
-function resumeTimedHold() {
+function resumeTimedHold(minimized = true) {
     const s = activeSession();
-    if (!s || !s.activeHold || s.status === 'completed' || s.date !== localDate()) {
-        stopHoldTicker(); hideHoldTimerUi(); return;
+    if (!validTimedHold(s)) {
+        stopHoldTicker();
+        hideHoldTimerUi();
+        if (s && s.activeHold) {
+            s.activeHold = null;
+            dirtySession(s);
+        }
+        return;
+    }
+    if (s.activeHold.endsAt <= Date.now()) {
+        finishTimedHold(true);
+        return;
     }
     if (timedHoldInterval === null) timedHoldInterval = setInterval(tickTimedHold, 250);
-    tickTimedHold();
+    if (minimized) showHoldTimerChip();
+    else tickTimedHold();
 }
 function startTimedHold(s, it, set) {
     if (s.activeHold) { showHoldTimerModal(); return; }
@@ -973,10 +1001,12 @@ function startTimedHold(s, it, set) {
     s.activeHold = { itemId: it.id, setId: set.id, startedAt, endsAt: startedAt + seconds * 1000, durationSeconds: seconds };
     dirtySession(s);
     if (tab === 'today') renderAll();
-    showHoldTimerModal();
-    resumeTimedHold();
+    resumeTimedHold(false);
+    if (s.activeHold) showHoldTimerModal();
 }
 holdOverlay.addEventListener('click', e => {
+    // Tapping the backdrop also dismisses the modal without cancelling the timer.
+    if (e.target === holdOverlay) { showHoldTimerChip(); return; }
     const control = e.target.closest('[data-hold-action]');
     if (!control) return;
     if (control.dataset.holdAction === 'cancel') cancelTimedHold();
@@ -2016,10 +2046,11 @@ document.addEventListener('change', e => { if (e.target.id === 'importFile') {
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installedPrompt = e; });
 if ('serviceWorker' in navigator && ['https:', 'http:'].includes(location.protocol) && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname)))
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('PWA:', e)));
+// Keep timer overlays hidden until storage has finished restoring the active session.
+hideHoldTimerUi();
 initStorage().then(() => {
     refreshWarmupTimer();
-    resumeTimedHold();
-    if (activeSession() && activeSession().activeHold) showHoldTimerModal();
+    resumeTimedHold(); // Restore as a small chip, not a blocking full-screen modal.
     const notice = el('startupAlert');
     if (notice && !window.__workoutRuntimeError)
         notice.hidden = true;
