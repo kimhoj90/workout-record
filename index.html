@@ -1218,7 +1218,7 @@ function countRoutineDuplicateNames(r) {
     for (const id of r.exerciseIds) {
         const ex = exerciseById(id);
         if (!ex) continue;
-        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        const key = libraryExerciseIdentity(ex);
         if (seen.has(key) && seen.get(key) !== id) count++;
         else if (!seen.has(key)) seen.set(key, id);
     }
@@ -1235,7 +1235,7 @@ function mergeRoutineDuplicateNames(id) {
     for (const exerciseId of r.exerciseIds) {
         const ex = exerciseById(exerciseId);
         if (!ex) { ids.push(exerciseId); continue; }
-        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        const key = libraryExerciseIdentity(ex);
         if (seen.has(key) && seen.get(key) !== exerciseId) {
             const keepId = seen.get(key), keep = exerciseById(keepId);
             const left = Array.isArray(plans[keepId]) ? plans[keepId] : (keep.defaultSets || []);
@@ -1341,8 +1341,16 @@ const knownMakerNames = [
     ['스타트랙', '스타트랙'], ['star trac', '스타트랙'],
     ['노틸러스', '너틸러스'], ['nautilus', '너틸러스']
 ].sort((a,b) => b[0].length - a[0].length);
+// Only the user-confirmed rack squat description is equivalent to a barbell squat.
+// Keep manufacturers and other squat variations distinct.
+function normalizeEquipmentDescription(value) {
+    const raw = String(value || '').normalize('NFKC')
+        .replace(/[\u00AD\u034F\u180E\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+    if (/^(?:파워\s*[렉랙]|\[파워\s*[렉랙]\])\s*바벨\s*(?:백\s*)?스쿼트$/i.test(raw)) return '바벨스쿼트';
+    return raw;
+}
 function bracketKnownMaker(value) {
-    const raw = String(value || '').trim();
+    const raw = normalizeEquipmentDescription(value);
     if (!raw || raw.startsWith('[')) return raw;
     const lowered = raw.toLocaleLowerCase();
     for (const [prefix, maker] of knownMakerNames) {
@@ -1377,6 +1385,8 @@ for (const row of exerciseCatalog) {
         } else uniqueCatalogAliases.set(key, nameKey);
     }
 }
+// The catalog's back squat and the user's barbell squat are the same movement.
+uniqueCatalogAliases.set(exerciseNameKey('바벨스쿼트'), exerciseNameKey('바벨 백 스쿼트'));
 function libraryExerciseIdentity(ex) {
     const display = splitExerciseDisplayName(bracketKnownMaker(ex.name));
     const maker = autocompleteKey(display.maker);
@@ -1439,9 +1449,9 @@ function refreshExerciseMaker() {
     el('exerciseMakerCustom').required=custom;
 }
 function splitExerciseDisplayName(value) {
-    const s=String(value||''),position=s.indexOf('] ');
-    return s.startsWith('[')&&position>1&&position<=41&&s.slice(position+2)
-        ? {maker:s.slice(1,position),name:s.slice(position+2)} : {maker:'',name:s};
+    const raw = String(value || '').trim();
+    const match = raw.match(/^\[([^\]]{1,40})\]\s*(.+)$/);
+    return match ? {maker:match[1],name:match[2]} : {maker:'',name:raw};
 }
 function refreshExerciseMode() {
     el('bodyweightModeRow').hidden = el('exerciseType').value !== 'bodyweight';
@@ -1471,7 +1481,7 @@ function saveExerciseForm() {
     const maker=(makerChoice==='__custom__'?f.elements.makerCustom.value:makerChoice).trim();
     if (makerChoice==='__custom__'&&!maker)return message('모델 또는 제조사를 입력해 줘');
     if(maker.includes('[')||maker.includes(']'))return message('제조사에 대괄호는 입력할 수 없어');
-    const name=maker?`[${maker}] ${baseName}`:baseName;
+    const name=bracketKnownMaker(maker?`[${maker}] ${baseName}`:baseName);
     if(name.length>80)return message('제조사 포함 운동명은 80자 이하여야 해');
     const ex = editExerciseId ? exerciseById(editExerciseId) : null;
     const type = f.elements.type.value;
@@ -1485,6 +1495,8 @@ function saveExerciseForm() {
         restSeconds: ex ? (ex.restSeconds == null ? 90 : ex.restSeconds) : (type === 'cardio' ? 0 : 90),
         createdAt: ex ? ex.createdAt : isoNow(), updatedAt: isoNow()
     };
+    if (!ex && state.exerciseLibrary.some(item => libraryExerciseIdentity(item) === libraryExerciseIdentity(record)))
+        return message('이미 등록된 운동이야. 운동 목록에서 기존 종목을 선택해 줘');
     if (ex) state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = record;
     else state.exerciseLibrary.push(record);
     modified(); el('exerciseDialog').close(); renderAll();
@@ -1626,13 +1638,15 @@ function exerciseNameKey(name) {
 function groupTextRoutineRows(rows) {
     const groups = [], byName = new Map();
     for (const row of rows) {
-        const key = exerciseNameKey(row.name);
+        const key = libraryExerciseIdentity(row).split('|').slice(2).join('|');
+        if (!exerciseNameKey(splitExerciseDisplayName(bracketKnownMaker(row.name)).name))
+            throw new Error('운동명에 글자가 없거나 보이지 않는 문자만 있어.');
         if (!key) throw new Error('운동명에 글자가 없거나 보이지 않는 문자만 있어.');
         let group = byName.get(key);
         if (group && (group.type !== row.type || group.bodyweightMode !== row.bodyweightMode))
             throw new Error(`${row.name}: 같은 운동명에 서로 다른 운동 종류·측정 방식을 섞을 수 없어.`);
         if (!group) {
-            group = { name: row.name, type: row.type, bodyweightMode: row.bodyweightMode, defaultSets: [] };
+            group = { name: bracketKnownMaker(row.name), type: row.type, bodyweightMode: row.bodyweightMode, defaultSets: [] };
             byName.set(key, group);
             groups.push(group);
         }
@@ -1673,11 +1687,9 @@ function saveTextRoutine(event) {
     // Plans live on the individual routine, so future progressive overload
     // doesn't create dozens of duplicate library exercises or alter old plans.
     const toAdd = [], ids = [], setPlans = {};
-    const normalized = exerciseNameKey;
     for (const group of groups) {
         const match = [...state.exerciseLibrary, ...toAdd].find(ex =>
-            normalized(ex.name) === normalized(group.name) && ex.type === group.type &&
-            (ex.bodyweightMode || 'reps') === group.bodyweightMode);
+            libraryExerciseIdentity(ex) === libraryExerciseIdentity(group));
         let ex = match;
         if (!ex) {
             const now = isoNow();
