@@ -1327,7 +1327,7 @@ function chooseExerciseSuggestion(index) {
     const match=exerciseSuggestions[index];
     if(!match)return;
     el('exerciseNameInput').value=match.entry[0];
-    hideExerciseSuggestions();el('exerciseNameInput').focus();
+    el('exerciseNameInput').focus();hideExerciseSuggestions();
 }
 function refreshExerciseMaker() {
     const custom=el('exerciseMakerSelect').value==='__custom__';
