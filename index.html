@@ -1278,6 +1278,67 @@ function addToToday(id) { const ex = exerciseById(id); if (!ex)
     return message('오늘 운동이 완료됐어. 운동 다시하기를 눌러 줘'); s.items.push(newItem(ex)); dirtySession(s); setTab('today'); message(`${ex.name} 추가했어`); }
 function move(arr, i, dir) { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length)
     return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; }
+// CSV-supplied exercise names are suggestions; manual entries remain valid.
+const exerciseCatalog = Array.isArray(window.WORKOUT_AUTOCOMPLETE) ? window.WORKOUT_AUTOCOMPLETE : [];
+let exerciseSuggestions = [], exerciseSuggestionActive = -1;
+function autocompleteKey(value) {
+    return String(value || '').normalize('NFKC').toLocaleLowerCase().replaceAll(' ', '');
+}
+function matchingExercises(query) {
+    const needle=autocompleteKey(query);
+    if (!needle) return [];
+    return exerciseCatalog.map((entry,index)=>{
+        const name=autocompleteKey(entry[0]), translation=autocompleteKey(entry[1]);
+        const aliases=String(entry[2]||'').split('|').map(autocompleteKey);
+        const score=name===needle?0:name.startsWith(needle)?1:
+            aliases.some(a=>a===needle)?2:aliases.some(a=>a.startsWith(needle))?3:
+            name.includes(needle)?4:translation.includes(needle)?5:
+            aliases.some(a=>a.includes(needle))?6:-1;
+        return score<0?null:{entry,index,score};
+    }).filter(Boolean).sort((a,b)=>a.score-b.score||a.index-b.index).slice(0,8);
+}
+function hideExerciseSuggestions() {
+    exerciseSuggestions=[];exerciseSuggestionActive=-1;
+    el('exerciseSuggestions').hidden=true;
+    el('exerciseSuggestions').innerHTML='';
+    el('exerciseNameInput').setAttribute('aria-expanded','false');
+    el('exerciseNameInput').removeAttribute('aria-activedescendant');
+}
+function renderExerciseSuggestions() {
+    const list=el('exerciseSuggestions');
+    if(!exerciseSuggestions.length){hideExerciseSuggestions();return;}
+    list.innerHTML=exerciseSuggestions.map(({entry},i)=>{
+        const extra=[entry[1]?'설명: '+entry[1]:'',entry[2]?'별칭: '+entry[2].split('|').slice(0,3).join(', '):''].filter(Boolean).join(' · ');
+        return `<button type="button" role="option" class="exercise-suggestion" id="exerciseSuggestion-${i}" data-suggest-index="${i}" aria-selected="${i===exerciseSuggestionActive}"><strong>${escapeHtml(entry[0])}</strong>${extra?`<small>${escapeHtml(extra)}</small>`:''}</button>`;
+    }).join('');
+    list.hidden=false;
+    const input=el('exerciseNameInput');input.setAttribute('aria-expanded','true');
+    if(exerciseSuggestionActive>=0){
+        input.setAttribute('aria-activedescendant','exerciseSuggestion-'+exerciseSuggestionActive);
+        const option=list.querySelector('[aria-selected="true"]');
+        if(option)option.scrollIntoView({block:'nearest'});
+    }else input.removeAttribute('aria-activedescendant');
+}
+function updateExerciseSuggestions() {
+    exerciseSuggestions=matchingExercises(el('exerciseNameInput').value);
+    exerciseSuggestionActive=-1;renderExerciseSuggestions();
+}
+function chooseExerciseSuggestion(index) {
+    const match=exerciseSuggestions[index];
+    if(!match)return;
+    el('exerciseNameInput').value=match.entry[0];
+    hideExerciseSuggestions();el('exerciseNameInput').focus();
+}
+function refreshExerciseMaker() {
+    const custom=el('exerciseMakerSelect').value==='__custom__';
+    el('exerciseMakerCustomRow').hidden=!custom;
+    el('exerciseMakerCustom').required=custom;
+}
+function splitExerciseDisplayName(value) {
+    const s=String(value||''),position=s.indexOf('] ');
+    return s.startsWith('[')&&position>1&&position<=41&&s.slice(position+2)
+        ? {maker:s.slice(1,position),name:s.slice(position+2)} : {maker:'',name:s};
+}
 function refreshExerciseMode() {
     el('bodyweightModeRow').hidden = el('exerciseType').value !== 'bodyweight';
 }
@@ -1285,7 +1346,12 @@ function openExerciseDialog(id = null) {
     editExerciseId = id;
     const ex = exerciseById(id), f = el('exerciseForm');
     f.reset();
-    f.elements.name.value = ex ? ex.name : '';
+    const displayName=splitExerciseDisplayName(ex?ex.name:'');
+    f.elements.name.value=displayName.name;
+    const makers=[...el('exerciseMakerSelect').options].map(o=>o.value);
+    f.elements.maker.value=makers.includes(displayName.maker)?displayName.maker:'__custom__';
+    f.elements.makerCustom.value=makers.includes(displayName.maker)?'':displayName.maker;
+    refreshExerciseMaker();hideExerciseSuggestions();
     f.elements.type.value = ex ? ex.type : 'weight';
     f.elements.caution.value = ex ? (ex.caution || '') : '';
     f.elements.tags.value = ex ? (ex.tags || []).join(', ') : '';
@@ -1295,8 +1361,14 @@ function openExerciseDialog(id = null) {
     el('exerciseDialog').showModal();
 }
 function saveExerciseForm() {
-    const f = el('exerciseForm'), name = f.elements.name.value.trim();
-    if (!name) return message('운동명을 입력해 줘');
+    const f=el('exerciseForm'), baseName=f.elements.name.value.trim();
+    if (!baseName) return message('운동명을 입력해 줘');
+    const makerChoice=f.elements.maker.value;
+    const maker=(makerChoice==='__custom__'?f.elements.makerCustom.value:makerChoice).trim();
+    if (makerChoice==='__custom__'&&!maker)return message('모델 또는 제조사를 입력해 줘');
+    if(maker.includes('[')||maker.includes(']'))return message('제조사에 대괄호는 입력할 수 없어');
+    const name=maker?`[${maker}] ${baseName}`:baseName;
+    if(name.length>80)return message('제조사 포함 운동명은 80자 이하여야 해');
     const ex = editExerciseId ? exerciseById(editExerciseId) : null;
     const type = f.elements.type.value;
     const record = {
