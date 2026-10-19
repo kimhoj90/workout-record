@@ -1,4 +1,4 @@
-const CACHE='workout-record-v3.5-20261019-exercise-autocomplete';
+const CACHE='workout-record-v3.5.1-20261019-identity-import';
 const ASSETS=['./','./index.html','./exercise_catalog.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));

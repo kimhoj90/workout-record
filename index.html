@@ -257,7 +257,7 @@ dialog.dialog-polyfill-open{display:block;position:fixed;inset:7vh 10px auto;z-i
 </head>
 <body>
 <div class="shell">
-<header class="top"><div><div class="eyebrow">YOUR WORKOUT · v3.5</div><h1 id="pageTitle">오늘 운동</h1><p class="seo-tagline">운동 기록 · 루틴 관리 · 자동 휴식 타이머</p></div><div class="today-date" id="dateLabel"></div></header>
+<header class="top"><div><div class="eyebrow">YOUR WORKOUT · v3.5.1</div><h1 id="pageTitle">오늘 운동</h1><p class="seo-tagline">운동 기록 · 루틴 관리 · 자동 휴식 타이머</p></div><div class="today-date" id="dateLabel"></div></header>
 <section id="startupAlert" data-nosnippet class="startup-alert" role="alert"><strong>앱 실행을 확인할 수 없어.</strong>화면은 보이는데 버튼이 작동하지 않는다면, HTML 미리보기 앱이 JavaScript 실행을 막고 있을 수 있어. 이 파일을 Chrome·Safari 같은 정식 브라우저에서 열거나 HTTPS 웹주소로 접속해 줘.<div id="startupErrorDetail"></div></section>
 <main id="main" aria-live="off"><p class="muted" data-nosnippet>저장된 운동 기록을 불러오는 중...</p></main>
 </div>
@@ -747,7 +747,7 @@ catch (e) {
     }
 } activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; if (!activeSessionId) {
     ensureTodaySession();
-} renderAll(); }
+} if (normalizeSavedExerciseMakers()) persist(); renderAll(); }
 function persist() { const snap = clone(state); writeChain = writeChain.catch(() => { }).then(async () => { try {
     if (db)
         await idbPut(snap);
@@ -1164,14 +1164,61 @@ function renderSetRow(it, se, i) {
     return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : hold ? '시간 유지 운동 시작' : '완료'}" title="${hold && !se.completed ? '운동 타이머 시작' : ''}" data-item-action="toggle-set">${se.completed ? '✓' : hold ? '▶' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
 }
 function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">여기에는 운동 종목만 등록해. 목표 중량·횟수·세트는 루틴에서 설정할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
-function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · 루틴에서 세트별 목표 설정</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
+function renderLibraryItems() {
+    const search = el('librarySearch');
+    const q = autocompleteKey(search ? search.value.trim() : '');
+    const filter = el('libraryFilter');
+    const type = filter ? filter.value : '';
+    // Group equivalent saved IDs *in the view only*: old routine references,
+    // exercise IDs, individual templates and completed histories remain intact.
+    const results = state.exerciseLibrary.filter(ex => {
+        if (type && ex.type !== type) return false;
+        const text = autocompleteKey(ex.name + ' ' + (ex.tags || []).join(' '));
+        const canonical = libraryExerciseIdentity(ex).split('|')[3];
+        return !q || text.includes(q) || canonical.includes(q);
+    });
+    const groups = new Map();
+    for (const ex of results) {
+        const key = libraryExerciseIdentity(ex);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(ex);
+    }
+    if (!groups.size) return '<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>';
+    const actions = ex => `<div class="buttons" style="margin-top:12px">
+        <button class="btn tiny main" data-action="add-exercise-today" data-id="${escapeHtml(ex.id)}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button>
+        <button class="btn tiny" data-action="edit-exercise" data-id="${escapeHtml(ex.id)}">편집</button>
+        <button class="btn tiny" data-action="duplicate-exercise" data-id="${escapeHtml(ex.id)}">복제</button>
+        <button class="btn tiny danger" data-action="delete-exercise" data-id="${escapeHtml(ex.id)}">삭제</button>
+    </div>`;
+    return [...groups.values()].map(group => {
+        const ex = group[0];
+        const duplicates = group.slice(1);
+        const extra = duplicates.length ? `<details class="assessment">
+            <summary>동일 종목으로 검색된 기존 항목 ${duplicates.length}개 보기</summary>
+            <p class="subtext" style="margin:9px 0">운동 기록과 루틴 연결을 보호하기 위해 다른 ID는 삭제하지 않고 이 안에 모아 뒀어.</p>
+            ${duplicates.map(other => `<div class="chip" style="display:block"><strong>${escapeHtml(other.name)}</strong>
+                <small style="display:block">${typeLabel[other.type]} · 기존 항목</small>
+                ${actions(other)}
+            </div>`).join('')}
+        </details>` : '';
+        return `<article class="card">
+            <div class="list-title"><div><div class="name">${escapeHtml(ex.name)}</div>
+                <small>${typeLabel[ex.type]} · 루틴에서 세트별 목표 설정${duplicates.length ? ' · 중복 ' + duplicates.length + '개 묶음' : ''}</small>
+                </div><span class="pill">${escapeHtml((ex.tags || []).slice(0, 2).join(', '))}</span>
+            </div>
+            ${ex.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(ex.caution)}</p>` : ''}
+            ${actions(ex)}
+            ${extra}
+        </article>`;
+    }).join('');
+}
 function countRoutineDuplicateNames(r) {
     const seen = new Map();
     let count = 0;
     for (const id of r.exerciseIds) {
         const ex = exerciseById(id);
         if (!ex) continue;
-        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        const key = libraryExerciseIdentity(ex);
         if (seen.has(key) && seen.get(key) !== id) count++;
         else if (!seen.has(key)) seen.set(key, id);
     }
@@ -1188,7 +1235,7 @@ function mergeRoutineDuplicateNames(id) {
     for (const exerciseId of r.exerciseIds) {
         const ex = exerciseById(exerciseId);
         if (!ex) { ids.push(exerciseId); continue; }
-        const key = [ex.type, ex.bodyweightMode || 'reps', exerciseNameKey(ex.name)].join('|');
+        const key = libraryExerciseIdentity(ex);
         if (seen.has(key) && seen.get(key) !== exerciseId) {
             const keepId = seen.get(key), keep = exerciseById(keepId);
             const left = Array.isArray(plans[keepId]) ? plans[keepId] : (keep.defaultSets || []);
@@ -1280,9 +1327,76 @@ function move(arr, i, dir) { const j = i + dir; if (i < 0 || j < 0 || j >= arr.l
     return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; }
 // CSV-supplied exercise names are suggestions; manual entries remain valid.
 const exerciseCatalog = Array.isArray(window.WORKOUT_AUTOCOMPLETE) ? window.WORKOUT_AUTOCOMPLETE : [];
+// Recognize only known manufacturer/brand prefixes, not normal equipment ("파워렉").
+const knownMakerNames = [
+    ['라이프 피트니스', '라이프피트니스'], ['life fitness', '라이프피트니스'],
+    ['해머 스트렝스', '해머스트렝스'], ['hammer strength', '해머스트렝스'],
+    ['뉴텍', '뉴텍'], ['신코', '신코'], ['너틸러스', '너틸러스'],
+    ['해머스트렝스', '해머스트렝스'], ['라이프피트니스', '라이프피트니스'],
+    ['테크노짐', '테크노짐'], ['technogym', '테크노짐'],
+    ['매트릭스', '매트릭스'], ['matrix', '매트릭스'],
+    ['싸이벡스', '싸이벡스'], ['cybex', '싸이벡스'],
+    ['프리코어', '프리코어'], ['precor', '프리코어'], ['프리코', '프리코'],
+    ['호이스트', '호이스트'], ['hoist', '호이스트'],
+    ['스타트랙', '스타트랙'], ['star trac', '스타트랙'],
+    ['노틸러스', '너틸러스'], ['nautilus', '너틸러스']
+].sort((a,b) => b[0].length - a[0].length);
+// Only the user-confirmed rack squat description is equivalent to a barbell squat.
+// Keep manufacturers and other squat variations distinct.
+function normalizeEquipmentDescription(value) {
+    const raw = String(value || '').normalize('NFKC')
+        .replace(/[\u00AD\u034F\u180E\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+    if (/^(?:파워\s*[렉랙]|\[파워\s*[렉랙]\])\s*바벨\s*(?:백\s*)?스쿼트$/i.test(raw)) return '바벨스쿼트';
+    return raw;
+}
+function bracketKnownMaker(value) {
+    const raw = normalizeEquipmentDescription(value);
+    if (!raw || raw.startsWith('[')) return raw;
+    const lowered = raw.toLocaleLowerCase();
+    for (const [prefix, maker] of knownMakerNames) {
+        if (!lowered.startsWith(prefix.toLocaleLowerCase() + ' ')) continue;
+        const rest = raw.slice(prefix.length).trim();
+        if (!rest) return raw;
+        // A numeric model can travel with the brand: 뉴텍 M3 롱풀 → [뉴텍 M3] 롱풀.
+        const model = rest.match(/^([A-Za-z0-9-]{2,16})\s+(.+)$/);
+        if (model && /\d/.test(model[1])) return `[${maker} ${model[1]}] ${model[2]}`;
+        return `[${maker}] ${rest}`;
+    }
+    return raw;
+}
+function normalizeSavedExerciseMakers() {
+    let count = 0;
+    for (const ex of state.exerciseLibrary) {
+        const next = bracketKnownMaker(ex.name);
+        if (next !== ex.name) { ex.name = next; count++; }
+    }
+    return count;
+}
+// Do not collapse aliases that map to different exercises (e.g. shoulder press machines).
+const uniqueCatalogAliases = new Map();
+const conflictingCatalogAliases = new Set();
+for (const row of exerciseCatalog) {
+    const nameKey = autocompleteKey(row[0]);
+    for (const alias of [row[0], ...String(row[2] || '').split('|')]) {
+        const key = autocompleteKey(alias);
+        if (!key || conflictingCatalogAliases.has(key)) continue;
+        if (uniqueCatalogAliases.has(key) && uniqueCatalogAliases.get(key) !== nameKey) {
+            uniqueCatalogAliases.delete(key); conflictingCatalogAliases.add(key);
+        } else uniqueCatalogAliases.set(key, nameKey);
+    }
+}
+// The catalog's back squat and the user's barbell squat are the same movement.
+uniqueCatalogAliases.set(exerciseNameKey('바벨스쿼트'), exerciseNameKey('바벨 백 스쿼트'));
+function libraryExerciseIdentity(ex) {
+    const display = splitExerciseDisplayName(bracketKnownMaker(ex.name));
+    const maker = autocompleteKey(display.maker);
+    const nameKey = autocompleteKey(display.name);
+    const canonical = uniqueCatalogAliases.get(nameKey) || nameKey;
+    return [ex.type, ex.bodyweightMode || 'reps', maker, canonical].join('|');
+}
 let exerciseSuggestions = [], exerciseSuggestionActive = -1;
 function autocompleteKey(value) {
-    return String(value || '').normalize('NFKC').toLocaleLowerCase().replaceAll(' ', '');
+    return exerciseNameKey(value);
 }
 function matchingExercises(query) {
     const needle=autocompleteKey(query);
@@ -1335,9 +1449,9 @@ function refreshExerciseMaker() {
     el('exerciseMakerCustom').required=custom;
 }
 function splitExerciseDisplayName(value) {
-    const s=String(value||''),position=s.indexOf('] ');
-    return s.startsWith('[')&&position>1&&position<=41&&s.slice(position+2)
-        ? {maker:s.slice(1,position),name:s.slice(position+2)} : {maker:'',name:s};
+    const raw = String(value || '').trim();
+    const match = raw.match(/^\[([^\]]{1,40})\]\s*(.+)$/);
+    return match ? {maker:match[1],name:match[2]} : {maker:'',name:raw};
 }
 function refreshExerciseMode() {
     el('bodyweightModeRow').hidden = el('exerciseType').value !== 'bodyweight';
@@ -1367,7 +1481,7 @@ function saveExerciseForm() {
     const maker=(makerChoice==='__custom__'?f.elements.makerCustom.value:makerChoice).trim();
     if (makerChoice==='__custom__'&&!maker)return message('모델 또는 제조사를 입력해 줘');
     if(maker.includes('[')||maker.includes(']'))return message('제조사에 대괄호는 입력할 수 없어');
-    const name=maker?`[${maker}] ${baseName}`:baseName;
+    const name=bracketKnownMaker(maker?`[${maker}] ${baseName}`:baseName);
     if(name.length>80)return message('제조사 포함 운동명은 80자 이하여야 해');
     const ex = editExerciseId ? exerciseById(editExerciseId) : null;
     const type = f.elements.type.value;
@@ -1381,6 +1495,8 @@ function saveExerciseForm() {
         restSeconds: ex ? (ex.restSeconds == null ? 90 : ex.restSeconds) : (type === 'cardio' ? 0 : 90),
         createdAt: ex ? ex.createdAt : isoNow(), updatedAt: isoNow()
     };
+    if (!ex && state.exerciseLibrary.some(item => libraryExerciseIdentity(item) === libraryExerciseIdentity(record)))
+        return message('이미 등록된 운동이야. 운동 목록에서 기존 종목을 선택해 줘');
     if (ex) state.exerciseLibrary[withId(state.exerciseLibrary, ex.id)] = record;
     else state.exerciseLibrary.push(record);
     modified(); el('exerciseDialog').close(); renderAll();
@@ -1522,13 +1638,15 @@ function exerciseNameKey(name) {
 function groupTextRoutineRows(rows) {
     const groups = [], byName = new Map();
     for (const row of rows) {
-        const key = exerciseNameKey(row.name);
+        const key = libraryExerciseIdentity(row).split('|').slice(2).join('|');
+        if (!exerciseNameKey(splitExerciseDisplayName(bracketKnownMaker(row.name)).name))
+            throw new Error('운동명에 글자가 없거나 보이지 않는 문자만 있어.');
         if (!key) throw new Error('운동명에 글자가 없거나 보이지 않는 문자만 있어.');
         let group = byName.get(key);
         if (group && (group.type !== row.type || group.bodyweightMode !== row.bodyweightMode))
             throw new Error(`${row.name}: 같은 운동명에 서로 다른 운동 종류·측정 방식을 섞을 수 없어.`);
         if (!group) {
-            group = { name: row.name, type: row.type, bodyweightMode: row.bodyweightMode, defaultSets: [] };
+            group = { name: bracketKnownMaker(row.name), type: row.type, bodyweightMode: row.bodyweightMode, defaultSets: [] };
             byName.set(key, group);
             groups.push(group);
         }
@@ -1569,11 +1687,9 @@ function saveTextRoutine(event) {
     // Plans live on the individual routine, so future progressive overload
     // doesn't create dozens of duplicate library exercises or alter old plans.
     const toAdd = [], ids = [], setPlans = {};
-    const normalized = exerciseNameKey;
     for (const group of groups) {
         const match = [...state.exerciseLibrary, ...toAdd].find(ex =>
-            normalized(ex.name) === normalized(group.name) && ex.type === group.type &&
-            (ex.bodyweightMode || 'reps') === group.bodyweightMode);
+            libraryExerciseIdentity(ex) === libraryExerciseIdentity(group));
         let ex = match;
         if (!ex) {
             const now = isoNow();
@@ -1756,7 +1872,7 @@ catch (e) {
     message('가져오기 실패: ' + e.message);
     return;
 } if (!confirm(`이 기기의 기록 ${state.sessions.length}개 세션, 운동 ${state.exerciseLibrary.length}개를 가져온 파일의 데이터로 모두 바꿀까?\n\n이 작업은 되돌릴 수 없어. 기존 자료를 먼저 백업해 줘.`))
-    return; workoutRestTimer.cancel(); stopHoldTicker(); hideHoldTimerUi(); state = clone(parsed); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); resumeTimedHold(); message('백업 파일을 복원했어'); }
+    return; workoutRestTimer.cancel(); stopHoldTicker(); hideHoldTimerUi(); state = clone(parsed); normalizeSavedExerciseMakers(); historyYear = null; historyMonth = null; activeSessionId = ((_a = state.sessions.filter(s => s.date === localDate()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]) === null || _a === void 0 ? void 0 : _a.id) || null; await persist(); setTab('settings'); refreshWarmupTimer(); resumeTimedHold(); message('백업 파일을 복원했어'); }
 function install() { if (!installedPrompt) {
     message('HTTPS 배포 후 브라우저 메뉴에서 홈 화면에 추가해 줘');
     return;
