@@ -1164,7 +1164,54 @@ function renderSetRow(it, se, i) {
     return `<div class="set-row ${fields.length === 1 ? 'cols-1' : fields.length === 3 ? 'cols-3' : ''} ${se.completed ? 'checked' : ''}" data-set-id="${escapeHtml(se.id)}"><span class="set-label">${i + 1}셋</span>${cards}<button type="button" class="check" aria-pressed="${!!se.completed}" aria-label="${escapeHtml(it.name)} ${i + 1}세트 ${se.completed ? '완료 해제' : hold ? '시간 유지 운동 시작' : '완료'}" title="${hold && !se.completed ? '운동 타이머 시작' : ''}" data-item-action="toggle-set">${se.completed ? '✓' : hold ? '▶' : ''}</button></div><details class="set-options" data-set-id="${escapeHtml(se.id)}"><summary>${i + 1}세트 편집</summary><div class="buttons"><button class="btn tiny" data-set-action="up" type="button">↑ 위로</button><button class="btn tiny" data-set-action="down" type="button">↓ 아래로</button><button class="btn tiny danger" data-set-action="delete" type="button">이 세트 삭제</button></div></details>`;
 }
 function renderLibrary() { return `<section class="card highlight"><h2>내 운동 라이브러리</h2><p class="muted-block">여기에는 운동 종목만 등록해. 목표 중량·횟수·세트는 루틴에서 설정할 수 있어.</p><button class="btn main" data-action="open-exercise">+ 새 운동 만들기</button></section><div class="toolbar"><input class="input" id="librarySearch" placeholder="운동명이나 태그 검색" aria-label="운동 검색"><select class="select" id="libraryFilter"><option value="">전체 유형</option><option value="weight">중량운동</option><option value="bodyweight">맨손운동</option><option value="cardio">유산소</option></select></div><div id="libraryList">${renderLibraryItems()}</div>`; }
-function renderLibraryItems() { var _a, _b; const q = (((_a = el('librarySearch')) === null || _a === void 0 ? void 0 : _a.value) || '').trim().toLowerCase(), type = ((_b = el('libraryFilter')) === null || _b === void 0 ? void 0 : _b.value) || ''; const results = state.exerciseLibrary.filter(e => { var _a; return (!type || e.type === type) && `${e.name} ${((_a = e.tags) === null || _a === void 0 ? void 0 : _a.join(' ')) || ''}`.toLowerCase().includes(q); }); return results.length ? results.map(e => { var _a, _b; return `<article class="card"><div class="list-title"><div><div class="name">${escapeHtml(e.name)}</div><small>${typeLabel[e.type]} · 루틴에서 세트별 목표 설정</small></div><span class="pill">${escapeHtml((e.tags || []).slice(0, 2).join(', '))}</span></div>${e.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(e.caution)}</p>` : ''}<div class="buttons" style="margin-top:12px"><button class="btn tiny main" data-action="add-exercise-today" data-id="${e.id}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button><button class="btn tiny" data-action="edit-exercise" data-id="${e.id}">편집</button><button class="btn tiny" data-action="duplicate-exercise" data-id="${e.id}">복제</button><button class="btn tiny danger" data-action="delete-exercise" data-id="${e.id}">삭제</button></div></article>`; }).join('') : `<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>`; }
+function renderLibraryItems() {
+    const search = el('librarySearch');
+    const q = autocompleteKey(search ? search.value.trim() : '');
+    const filter = el('libraryFilter');
+    const type = filter ? filter.value : '';
+    // Group equivalent saved IDs *in the view only*: old routine references,
+    // exercise IDs, individual templates and completed histories remain intact.
+    const results = state.exerciseLibrary.filter(ex => {
+        if (type && ex.type !== type) return false;
+        const text = autocompleteKey(ex.name + ' ' + (ex.tags || []).join(' '));
+        const canonical = libraryExerciseIdentity(ex).split('|')[3];
+        return !q || text.includes(q) || canonical.includes(q);
+    });
+    const groups = new Map();
+    for (const ex of results) {
+        const key = libraryExerciseIdentity(ex);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(ex);
+    }
+    if (!groups.size) return '<div class="empty"><strong>조건에 맞는 운동이 없어</strong>운동을 새로 만들어 봐.</div>';
+    const actions = ex => `<div class="buttons" style="margin-top:12px">
+        <button class="btn tiny main" data-action="add-exercise-today" data-id="${escapeHtml(ex.id)}" ${isTodayLocked() ? 'disabled title="오늘 운동 완료됨"' : ''}>오늘 추가</button>
+        <button class="btn tiny" data-action="edit-exercise" data-id="${escapeHtml(ex.id)}">편집</button>
+        <button class="btn tiny" data-action="duplicate-exercise" data-id="${escapeHtml(ex.id)}">복제</button>
+        <button class="btn tiny danger" data-action="delete-exercise" data-id="${escapeHtml(ex.id)}">삭제</button>
+    </div>`;
+    return [...groups.values()].map(group => {
+        const ex = group[0];
+        const duplicates = group.slice(1);
+        const extra = duplicates.length ? `<details class="assessment">
+            <summary>동일 종목으로 검색된 기존 항목 ${duplicates.length}개 보기</summary>
+            <p class="subtext" style="margin:9px 0">운동 기록과 루틴 연결을 보호하기 위해 다른 ID는 삭제하지 않고 이 안에 모아 뒀어.</p>
+            ${duplicates.map(other => `<div class="chip" style="display:block"><strong>${escapeHtml(other.name)}</strong>
+                <small style="display:block">${typeLabel[other.type]} · 기존 항목</small>
+                ${actions(other)}
+            </div>`).join('')}
+        </details>` : '';
+        return `<article class="card">
+            <div class="list-title"><div><div class="name">${escapeHtml(ex.name)}</div>
+                <small>${typeLabel[ex.type]} · 루틴에서 세트별 목표 설정${duplicates.length ? ' · 중복 ' + duplicates.length + '개 묶음' : ''}</small>
+                </div><span class="pill">${escapeHtml((ex.tags || []).slice(0, 2).join(', '))}</span>
+            </div>
+            ${ex.caution ? `<p class="subtext" style="margin:11px 0">${escapeHtml(ex.caution)}</p>` : ''}
+            ${actions(ex)}
+            ${extra}
+        </article>`;
+    }).join('');
+}
 function countRoutineDuplicateNames(r) {
     const seen = new Map();
     let count = 0;
@@ -1339,7 +1386,7 @@ function libraryExerciseIdentity(ex) {
 }
 let exerciseSuggestions = [], exerciseSuggestionActive = -1;
 function autocompleteKey(value) {
-    return String(value || '').normalize('NFKC').toLocaleLowerCase().replaceAll(' ', '');
+    return exerciseNameKey(value);
 }
 function matchingExercises(query) {
     const needle=autocompleteKey(query);
